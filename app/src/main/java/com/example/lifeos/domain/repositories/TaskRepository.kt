@@ -27,6 +27,7 @@ interface TaskRepository {
 
     // Reminders
     fun getRemindersForTask(taskId: String): Flow<List<ReminderEntity>>
+    suspend fun getReminderById(reminderId: String): ReminderEntity?
     suspend fun insertReminder(reminder: ReminderEntity)
     suspend fun updateReminder(reminder: ReminderEntity)
     suspend fun deleteReminder(reminder: ReminderEntity)

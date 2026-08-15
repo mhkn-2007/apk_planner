@@ -7,7 +7,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A mock provider so the app runs and tests without needing an API key initially.
+ * Offline placeholder provider — not currently bound (see [com.example.lifeos.di.AIModule],
+ * which binds [GeminiProvider] instead). Kept as an example of the
+ * [AIProvider] abstraction (prompt section 36) and as a safe fallback
+ * implementation to bind back in if a network provider should be disabled
+ * for a build variant.
  */
 @Singleton
 class MockAIProvider @Inject constructor() : AIProvider {

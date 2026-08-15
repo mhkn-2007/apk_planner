@@ -19,18 +19,21 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.lifeos.ai.provider.AIProvider
-import com.example.lifeos.data.database.entities.TaskEntity
-import com.example.lifeos.domain.repositories.TaskRepository
+import com.example.lifeos.ai.provider.GeminiProvider
+import com.example.lifeos.ai.tools.AIToolCatalog
+import com.example.lifeos.ai.tools.AIToolLayer
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
+import com.example.lifeos.util.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
 import javax.inject.Inject
-import java.util.UUID
 
 data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -38,10 +41,20 @@ data class ChatMessage(
     val isUser: Boolean
 )
 
+/**
+ * A high-impact action the AI proposed and is waiting on the user to
+ * approve or cancel before it actually applies (prompt section 35).
+ */
+data class PendingAction(
+    val description: String,
+    val confirmation: AIToolCatalog.PendingConfirmation
+)
+
 @HiltViewModel
 class AIChatViewModel @Inject constructor(
-    private val aiProvider: AIProvider,
-    private val taskRepository: TaskRepository
+    private val geminiProvider: GeminiProvider,
+    private val toolCatalog: AIToolCatalog,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -50,11 +63,18 @@ class AIChatViewModel @Inject constructor(
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
 
+    private val _pendingAction = MutableStateFlow<PendingAction?>(null)
+    val pendingAction: StateFlow<PendingAction?> = _pendingAction.asStateFlow()
+
+    // Gemini's "contents" history for this conversation: (role, text) pairs.
+    // Kept small/relevant rather than growing forever (prompt section 60:
+    // don't send more than needed).
+    private val history = mutableListOf<Pair<String, String>>()
+
     init {
-        // Welcome message
         _messages.value = listOf(
             ChatMessage(
-                text = "سلام! من دستیار هوشمند شما هستم. می‌توانید کارهای روزمره خود را به صورت متنی بنویسید (مثلاً: «تسک جدید خرید کتاب») تا من آن را به لیست امروز شما اضافه کنم.",
+                text = "سلام! من دستیار هوشمند LifeOS هستم. می‌تونم کارها، اهداف، پروژه‌ها و روتین‌های شما رو مدیریت کنم. اگر هنوز کلید API را در تنظیمات وارد نکرده‌اید، این بخش در حالت آفلاین باقی می‌ماند و بقیه‌ی برنامه بدون تغییر کار می‌کند.",
                 isUser = false
             )
         )
@@ -65,48 +85,96 @@ class AIChatViewModel @Inject constructor(
 
         val userMsg = ChatMessage(text = text, isUser = true)
         _messages.value = _messages.value + userMsg
+        history.add("user" to text)
 
         _isTyping.value = true
 
         viewModelScope.launch {
-            val aiMsgId = java.util.UUID.randomUUID().toString()
-            var currentAiText = ""
-
-            _messages.value = _messages.value + ChatMessage(id = aiMsgId, text = currentAiText, isUser = false)
-
-            // Simple Offline NLP parser for direct database insertion
-            var actionConfirmation = ""
-            val cleaned = text.trim()
-            if (cleaned.contains("افزودن") || cleaned.contains("تسک") || cleaned.contains("کار") || cleaned.contains("بنویس") || cleaned.contains("ثبت")) {
-                val taskTitle = cleaned
-                    .replace("افزودن", "")
-                    .replace("تسک", "")
-                    .replace("کار جدید", "")
-                    .replace("کار", "")
-                    .replace("بنویس", "")
-                    .replace("ثبت", "")
-                    .trim()
-                
-                if (taskTitle.isNotBlank()) {
-                    taskRepository.insertTask(
-                        TaskEntity(
-                            id = UUID.randomUUID().toString(),
-                            title = taskTitle,
-                            dueDateMillis = System.currentTimeMillis()
-                        )
-                    )
-                    actionConfirmation = "\n\n(انجام شد! کار «$taskTitle» به لیست امروز شما اضافه گردید.)"
-                }
+            try {
+                val apiKey = preferencesManager.apiKey.first()
+                runConversationTurn(apiKey)
+            } catch (e: GeminiProvider.AIProviderException) {
+                // AI failures must never break the rest of the app (prompt
+                // section 39) — show a clear message and let the user keep
+                // using LifeOS manually.
+                appendAssistantMessage(e.message ?: "خطایی در ارتباط با هوش مصنوعی رخ داد.")
+            } catch (e: Exception) {
+                appendAssistantMessage("خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید یا از بخش‌های دیگر برنامه به‌صورت دستی استفاده کنید.")
+            } finally {
+                _isTyping.value = false
             }
-
-            aiProvider.streamChat(text, "context: user scheduling").collect { chunk ->
-                currentAiText = chunk + actionConfirmation
-                _messages.value = _messages.value.map {
-                    if (it.id == aiMsgId) it.copy(text = currentAiText) else it
-                }
-            }
-            _isTyping.value = false
         }
+    }
+
+    private suspend fun runConversationTurn(apiKey: String) {
+        val today = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date())
+        val systemInstruction = """
+            شما دستیار برنامه‌ریزی شخصی LifeOS هستید. فقط از طریق ابزارهای اعلام‌شده به داده‌های کاربر
+            دسترسی دارید و هرگز نباید داده یا اقدامی را جعل کنید. زمان فعلی دستگاه: $today.
+            برای عملیات‌های پرتاثیر (حذف/جابجایی چند کار)، ابزار مربوطه ممکن است نیاز به تأیید کاربر را
+            گزارش کند؛ در این حالت فقط توضیح بده که منتظر تأیید کاربر هستید و از ابزار دیگری برای دور زدن
+            آن استفاده نکن. پاسخ‌ها را به فارسی و کوتاه بده.
+        """.trimIndent()
+
+        var turn = geminiProvider.sendTurn(
+            apiKey = apiKey,
+            systemInstruction = systemInstruction,
+            history = history,
+            functionDeclarations = toolCatalog.buildFunctionDeclarations()
+        )
+
+        // Function-calling loop: execute any tool calls, feed results back,
+        // repeat until the model responds with plain text (bounded to avoid
+        // an infinite loop on a misbehaving response).
+        var rounds = 0
+        while (turn.functionCalls.isNotEmpty() && rounds < 5) {
+            rounds++
+            for (call in turn.functionCalls) {
+                val dispatch = toolCatalog.dispatch(call.name, call.args)
+                if (dispatch.requiresConfirmation && dispatch.pendingConfirmation != null) {
+                    _pendingAction.value = PendingAction(
+                        description = dispatch.pendingConfirmation.description,
+                        confirmation = dispatch.pendingConfirmation
+                    )
+                }
+                history.add("model" to "[${call.name} -> ${dispatch.responseJson}]")
+            }
+            turn = geminiProvider.sendTurn(
+                apiKey = apiKey,
+                systemInstruction = systemInstruction,
+                history = history,
+                functionDeclarations = toolCatalog.buildFunctionDeclarations()
+            )
+        }
+
+        val finalText = turn.text.ifBlank { "انجام شد." }
+        history.add("model" to finalText)
+        appendAssistantMessage(finalText)
+    }
+
+    /** User tapped "Apply" on a pending high-impact action preview. */
+    fun confirmPendingAction() {
+        val pending = _pendingAction.value ?: return
+        viewModelScope.launch {
+            val result = toolCatalog.applyConfirmation(pending.confirmation)
+            _pendingAction.value = null
+            val message = when (result) {
+                is AIToolLayer.ToolResult.Success -> result.message
+                is AIToolLayer.ToolResult.Failure -> result.reason
+                is AIToolLayer.ToolResult.RequiresConfirmation -> result.description
+            }
+            appendAssistantMessage(message)
+        }
+    }
+
+    /** User tapped "Cancel" on a pending high-impact action preview. */
+    fun cancelPendingAction() {
+        _pendingAction.value = null
+        appendAssistantMessage("لغو شد.")
+    }
+
+    private fun appendAssistantMessage(text: String) {
+        _messages.value = _messages.value + ChatMessage(text = text, isUser = false)
     }
 }
 
@@ -114,12 +182,9 @@ class AIChatViewModel @Inject constructor(
 fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
     val messages by viewModel.messages.collectAsState()
     val isTyping by viewModel.isTyping.collectAsState()
+    val pendingAction by viewModel.pendingAction.collectAsState()
     var inputText by remember { mutableStateOf("") }
 
-    // Background and text colors were previously hardcoded to the dark
-    // palette regardless of the user's theme setting. Now derived from the
-    // same dark/light flag the rest of the app uses, matching the fix
-    // already applied to ProjectsScreen.
     val isDark = LocalIsDarkTheme.current
     val bgGradient = if (isDark) {
         Brush.verticalGradient(colors = listOf(GradientStart, GradientMiddle, GradientEnd))
@@ -133,7 +198,6 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
             .background(bgGradient)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header
             Box(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                 Column {
                     Text(
@@ -171,6 +235,43 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
                         )
                     }
                 }
+            }
+
+            // Action preview / confirmation card (prompt section 35: show a
+            // preview before applying major changes — "Review Changes" /
+            // "Apply Plan" / "Cancel").
+            pendingAction?.let { action ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .glassCard(cornerRadius = 16.dp)
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(
+                            "تأیید تغییرات",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            action.description,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viewModel.confirmPendingAction() },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                            ) { Text("اعمال کن") }
+                            OutlinedButton(onClick = { viewModel.cancelPendingAction() }) {
+                                Text("انصراف")
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             // Input Row with high-contrast text styling

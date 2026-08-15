@@ -75,6 +75,10 @@ class TaskRepositoryImpl @Inject constructor(
         return reminderDao.getRemindersForTask(taskId)
     }
 
+    override suspend fun getReminderById(reminderId: String): ReminderEntity? {
+        return reminderDao.getReminderById(reminderId)
+    }
+
     override suspend fun insertReminder(reminder: ReminderEntity) {
         reminderDao.insertReminder(reminder)
     }

@@ -54,7 +54,15 @@
 - هیچ‌کدوم از Action Tools بخش ۲۲ به‌جز `createTask`, `rescheduleTask`, `deleteLowPriorityTasks` پیاده نشده.
 - AI Daily/Weekly Planning (بخش ۲۳، ۲۴)، Task Breakdown (۲۶)، Rescheduling (۲۷)، Routine Creation (۲۸) هیچ‌کدوم پیاده نشدن.
 - `AIChatScreen` به‌جای استفاده از AI Tool Layer، یک parser دستی بر پایه `contains("تسک")` داره.
-**وضعیت: خارج از scope فیکس‌های فوری؛ نیازمند طراحی و پیاده‌سازی مجزا.**
+**وضعیت: بخش اصلی فیکس شد (فاز ۴).**
+- `GeminiProvider` به‌عنوان Provider واقعی (بخش ۳۶: AIProvider abstraction) اضافه شد؛ از طریق OkHttp مستقیم با REST API جمنای (`generateContent` + function calling) صحبت می‌کنه. `AIModule` الان این رو bind می‌کنه (نه `MockAIProvider` رو).
+- `AIReadTools` اضافه شد: تمام ابزارهای خواندنی بخش ۲۱ (`get_tasks`, `get_today_tasks`, `get_unfinished_tasks`, `get_goals`, `get_projects`, `get_habits`, `get_routines`, `get_productivity_history`) — همه فقط از طریق DAO/Repository موجود می‌خونن، دسترسی خام به دیتابیس ندارن.
+- `AIToolLayer` گسترش پیدا کرد: `createTask`, `updateTask`, `completeTask`, `deleteTask`, `scheduleTask`, `rescheduleTask`, `createSubtask`, `createReminder`, `updateReminder`, `deleteReminder`, `createRoutine`, `updateRoutine`, `createGoal`, `createProject`, و عملیات پرتاثیر (`previewDeleteTasks`/`confirmDeleteTasks`, `previewMoveTasks`/`confirmMoveTasks`) که طبق بخش ۳۵ نیازمند تأیید کاربرن.
+- `AIToolCatalog` اضافه شد: تعریف schema ابزارها برای function-calling جمنای + dispatch کردن هر function call مدل به `AIReadTools`/`AIToolLayer` — این لایه‌ایه که مدل هیچ‌وقت مستقیم به دیتابیس دسترسی نداره (بخش ۲۱/۲۲).
+- `AIChatScreen`/`AIChatViewModel` کامل بازنویسی شد: parser دستی `contains("تسک")` حذف شد، حالا با یک حلقه‌ی function-calling واقعی با جمنای صحبت می‌کنه و یک UI پیش‌نمایش/تأیید («اعمال کن» / «انصراف») برای اکشن‌های پرتاثیر داره (بخش ۳۵).
+- شکست‌های AI (بدون کلید، خطای شبکه، خطای سرویس) به‌صورت پیام خطای واضح به کاربر نشون داده می‌شن و بقیه‌ی برنامه دست‌نخورده باقی می‌مونه (بخش ۳۹).
+- کلید API طبق تصمیم گرفته‌شده، فعلاً توسط خود کاربر در Settings وارد می‌شه (راه‌حل ساده‌تر ولی خلاف روح کامل بخش ۳۷-۳۹ برای production؛ مدیریت کلید سمت بک‌اند یک تصمیم معماری جداست که هنوز گرفته نشده).
+- **هنوز پیاده نشده:** AI Daily/Weekly Planning (بخش ۲۳-۲۴ — یک جریان مکالمه‌ی چندمرحله‌ای اختصاصی که از `DeterministicPlannerEngine` هم استفاده کنه)، Task Breakdown خودکار (۲۶)، AI Rescheduling اختصاصی (۲۷، فراتر از ابزار عمومی `reschedule_task`)، AI Daily Review (۳۰)، حافظه‌ی مکالمه‌ی پایدار بین نشست‌ها (بخش ۶۰ — الان تاریخچه فقط در حافظه‌ی ViewModel هست و با بستن اپ از بین می‌ره).
 
 ### 🔴 ۲.۲ — بخش ۱۲ (Routines): هیچ UI و DAO‌ای نداره
 Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتابیس هستن ولی:
@@ -126,7 +134,7 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 1. ✅ فاز ۱: فیکس باگ‌های بحرانی فنی که اپ فعلی رو می‌شکنه — **انجام شد**
 2. ✅ فاز ۲: DAO های گمشده (Subtask, Reminder, Routine) + اتصال به UI — **انجام شد**
 3. ✅ فاز ۳: پیاده‌سازی Routines (Template/Instance) با UI کامل — **انجام شد**
-4. فاز ۴: پیاده‌سازی AI Tool Layer واقعی + Read/Action Tools + اتصال به یک Provider واقعی (نیازمند تصمیم درباره‌ی نحوه‌ی مدیریت کلید API طبق بخش ۳۷-۳۹ پرامپت) — **هنوز مونده**
+4. ✅ فاز ۴: پیاده‌سازی AI Tool Layer واقعی + Read/Action Tools + اتصال به یک Provider واقعی (Gemini، با کلید وارد‌شده توسط کاربر در Settings) — **انجام شد**
 5. فاز ۵: Focus Mode — **هنوز مونده**
 6. فاز ۶: Analytics — **هنوز مونده (پایه‌ی `HabitLog` برای آمار عادت‌ها آماده شد)**
 7. ✅ فاز ۷: Goals/Projects Milestones + اتصال کامل زنجیره‌ی Goal→Project→Task — **انجام شد**
@@ -134,4 +142,4 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks/Goals/Focus/Analytics هنوز صفحه‌ی مستقل تو bottom nav ندارن) — **هنوز مونده**
 10. ✅ تکمیل جزئی ۲.۱۰ (Data model — `HabitLog`) و ۲.۱۱ (حذف کد مرده‌ی `ReminderWorker`) — **انجام شد**
 
-بزرگترین کار باقی‌مانده فاز ۴ (سیستم AI واقعی، بخش‌های ۲۰ تا ۴۱ پرامپت) هست؛ حجمش با همه‌ی فازهای قبلی روی هم برابری می‌کنه و باید در چند نوبت کاری جدا انجام بشه.
+بزرگترین کار باقی‌مانده حالا فاز‌های ۵ و ۶ (Focus Mode و Analytics) و تکمیل نهایی سیستم AI (برنامه‌ریزی روزانه/هفتگی خودکار، حافظه‌ی مکالمه‌ی پایدار) هستن.
