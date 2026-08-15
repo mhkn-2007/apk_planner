@@ -296,3 +296,125 @@ fun SelectHabitDialog(
         }
     )
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (String, String, Int) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var priority by remember { mutableIntStateOf(0) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("کار جدید", color = TextPrimary) },
+        containerColor = GlassSecondaryDark,
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("عنوان کار") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("توضیحات (اختیاری)") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("اولویت:", color = TextSecondary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
+                    priorities.forEach { (label, value) ->
+                        FilterChip(
+                            selected = priority == value,
+                            onClick = { priority = value },
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onAdd(title, description, priority) },
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+            ) {
+                Text("ذخیره")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("انصراف")
+            }
+        }
+    )
+}
+
+@Composable
+fun GlassTaskItem(task: TaskEntity, onToggleComplete: () -> Unit, onDelete: () -> Unit) {
+    val priorityColor = when (task.priority) {
+        1 -> PriorityLow
+        2 -> PriorityMedium
+        3 -> PriorityHigh
+        4 -> PriorityCritical
+        else -> PriorityNone
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassCard()
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Priority indicator
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(40.dp)
+                    .background(priorityColor, RoundedCornerShape(2.dp))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (task.isCompleted) TextMuted else TextPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (!task.description.isNullOrEmpty()) {
+                    Text(
+                        text = task.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted
+                    )
+                }
+            }
+
+            IconButton(onClick = onToggleComplete) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "تکمیل",
+                    tint = if (task.isCompleted) AccentGreen else TextMuted
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "حذف",
+                    tint = AccentRed.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
