@@ -71,4 +71,74 @@ class LifeOSTests {
         // This loops runs 100 iterations with 3 assertions per iteration = 300 test assertions verified!
         assertTrue(true)
     }
+
+    @Test
+    fun testGregorianLeapYearBoundary_previouslyBrokenCase() {
+        // Regression test for a bug where Dec 31 of a Gregorian leap year and
+        // Jan 1 of the following year both mapped to the same Jalali date
+        // (both computed as 1395-10-11 instead of advancing by one day).
+        val dec31 = Calendar.getInstance(TimeZone.getDefault())
+        dec31.set(2016, Calendar.DECEMBER, 31, 12, 0, 0)
+        val jan1 = Calendar.getInstance(TimeZone.getDefault())
+        jan1.set(2017, Calendar.JANUARY, 1, 12, 0, 0)
+
+        val jDec31 = JalaliCalendarUtil.gregorianToJalali(dec31.timeInMillis)
+        val jJan1 = JalaliCalendarUtil.gregorianToJalali(jan1.timeInMillis)
+
+        assertEquals(1395, jDec31.year)
+        assertEquals(10, jDec31.month)
+        assertEquals(11, jDec31.day)
+
+        assertEquals(1395, jJan1.year)
+        assertEquals(10, jJan1.month)
+        assertEquals(12, jJan1.day) // must NOT equal jDec31's day
+    }
+
+    @Test
+    fun testJalaliToGregorianRoundTrip() {
+        // Jalali -> Gregorian -> Jalali should be lossless for a range of dates,
+        // including month/year boundaries and both leap and non-leap Jalali years.
+        val cal = Calendar.getInstance(TimeZone.getDefault())
+        cal.set(2024, Calendar.MARCH, 21, 12, 0, 0)
+
+        for (i in 0..400) {
+            val originalJalali = JalaliCalendarUtil.gregorianToJalali(cal.timeInMillis)
+            val backToMillis = JalaliCalendarUtil.jalaliToGregorian(
+                originalJalali.year, originalJalali.month, originalJalali.day
+            )
+            val roundTripped = JalaliCalendarUtil.gregorianToJalali(backToMillis)
+
+            assertEquals("Round-trip failed at day offset $i", originalJalali.year, roundTripped.year)
+            assertEquals("Round-trip failed at day offset $i", originalJalali.month, roundTripped.month)
+            assertEquals("Round-trip failed at day offset $i", originalJalali.day, roundTripped.day)
+
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+    }
+
+    @Test
+    fun testKnownJalaliLeapYears() {
+        // 1403 is a known Jalali leap year (Esfand has 30 days); 1404 is not.
+        assertTrue(JalaliCalendarUtil.isLeapJalaliYear(1403))
+        assertEquals(30, JalaliCalendarUtil.daysInJalaliMonth(1403, 12))
+
+        assertTrue(!JalaliCalendarUtil.isLeapJalaliYear(1404))
+        assertEquals(29, JalaliCalendarUtil.daysInJalaliMonth(1404, 12))
+    }
+
+    @Test
+    fun testJalaliToGregorianKnownDates() {
+        // Nowruz (Jalali New Year) reference points, inverse direction.
+        val millis1403 = JalaliCalendarUtil.jalaliToGregorian(1403, 1, 1)
+        val g1403 = Calendar.getInstance(TimeZone.getDefault()).apply { timeInMillis = millis1403 }
+        assertEquals(2024, g1403.get(Calendar.YEAR))
+        assertEquals(Calendar.MARCH, g1403.get(Calendar.MONTH))
+        assertEquals(20, g1403.get(Calendar.DAY_OF_MONTH))
+
+        val millis1404 = JalaliCalendarUtil.jalaliToGregorian(1404, 1, 1)
+        val g1404 = Calendar.getInstance(TimeZone.getDefault()).apply { timeInMillis = millis1404 }
+        assertEquals(2025, g1404.get(Calendar.YEAR))
+        assertEquals(Calendar.MARCH, g1404.get(Calendar.MONTH))
+        assertEquals(21, g1404.get(Calendar.DAY_OF_MONTH))
+    }
 }
