@@ -19,5 +19,7 @@ data class TaskEntity(
     val goalId: String? = null,
     val projectId: String? = null,
     val isCompleted: Boolean = false,
+    val timeOfDay: String? = null, // MORNING, AFTERNOON, NIGHT, CUSTOM
+    val alarmTimeMillis: Long? = null, // specific scheduled alarm time
     val createdAtMillis: Long = System.currentTimeMillis()
 )

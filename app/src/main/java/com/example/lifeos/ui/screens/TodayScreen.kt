@@ -1,5 +1,7 @@
 package com.example.lifeos.ui.screens
 
+import android.app.TimePickerDialog
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,13 +14,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -30,8 +35,10 @@ import com.example.lifeos.domain.repositories.TaskRepository
 import com.example.lifeos.domain.usecases.GetTodayTasksUseCase
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
+import com.example.lifeos.util.AlarmScheduler
 import com.example.lifeos.util.JalaliCalendarUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -40,12 +47,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import java.util.UUID
+import java.util.Calendar
 
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val getTodayTasksUseCase: GetTodayTasksUseCase,
     private val taskRepository: TaskRepository,
-    private val habitDao: HabitDao
+    private val habitDao: HabitDao,
+    private val alarmScheduler: AlarmScheduler,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _tasks = MutableStateFlow<List<TaskEntity>>(emptyList())
@@ -66,30 +76,112 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    fun addTask(title: String, description: String, priority: Int) {
+    fun addTask(title: String, description: String, priority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null) {
         if (title.isBlank()) return
         viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            var alarmTime: Long? = null
+
+            if (timeOfDay != null) {
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = now
+                when (timeOfDay) {
+                    "MORNING" -> {
+                        cal.set(Calendar.HOUR_OF_DAY, 9)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                    }
+                    "AFTERNOON" -> {
+                        cal.set(Calendar.HOUR_OF_DAY, 15)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                    }
+                    "NIGHT" -> {
+                        cal.set(Calendar.HOUR_OF_DAY, 21)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                    }
+                    "CUSTOM" -> {
+                        if (customHour != null && customMinute != null) {
+                            cal.set(Calendar.HOUR_OF_DAY, customHour)
+                            cal.set(Calendar.MINUTE, customMinute)
+                            cal.set(Calendar.SECOND, 0)
+                        }
+                    }
+                }
+                alarmTime = cal.timeInMillis
+                if (alarmTime < now) {
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    alarmTime = cal.timeInMillis
+                }
+            }
+
             val task = TaskEntity(
                 id = UUID.randomUUID().toString(),
                 title = title,
                 description = description.ifBlank { null },
                 priority = priority,
-                dueDateMillis = System.currentTimeMillis()
+                dueDateMillis = System.currentTimeMillis(),
+                timeOfDay = timeOfDay,
+                alarmTimeMillis = alarmTime
             )
             taskRepository.insertTask(task)
+
+            alarmTime?.let {
+                alarmScheduler.scheduleAlarm(context, task.id, task.title, it)
+            }
         }
     }
 
-    fun addHabitAsTask(habit: HabitEntity) {
+    fun updateTask(task: TaskEntity, newTitle: String, newDesc: String, newPriority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null) {
         viewModelScope.launch {
-            val task = TaskEntity(
-                id = UUID.randomUUID().toString(),
-                title = habit.name,
-                description = habit.description ?: "عادت روزانه",
-                priority = 2, // Medium priority by default
-                dueDateMillis = System.currentTimeMillis()
+            val now = System.currentTimeMillis()
+            var alarmTime: Long? = null
+
+            if (timeOfDay != null) {
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = now
+                when (timeOfDay) {
+                    "MORNING" -> {
+                        cal.set(Calendar.HOUR_OF_DAY, 9)
+                        cal.set(Calendar.MINUTE, 0)
+                    }
+                    "AFTERNOON" -> {
+                        cal.set(Calendar.HOUR_OF_DAY, 15)
+                        cal.set(Calendar.MINUTE, 0)
+                    }
+                    "NIGHT" -> {
+                        cal.set(Calendar.HOUR_OF_DAY, 21)
+                        cal.set(Calendar.MINUTE, 0)
+                    }
+                    "CUSTOM" -> {
+                        if (customHour != null && customMinute != null) {
+                            cal.set(Calendar.HOUR_OF_DAY, customHour)
+                            cal.set(Calendar.MINUTE, customMinute)
+                        }
+                    }
+                }
+                alarmTime = cal.timeInMillis
+                if (alarmTime < now) {
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    alarmTime = cal.timeInMillis
+                }
+            }
+
+            val updated = task.copy(
+                title = newTitle,
+                description = newDesc.ifBlank { null },
+                priority = newPriority,
+                timeOfDay = timeOfDay,
+                alarmTimeMillis = alarmTime
             )
-            taskRepository.insertTask(task)
+            taskRepository.updateTask(updated)
+
+            // Reschedule or cancel alarm
+            alarmScheduler.cancelAlarm(context, task.id)
+            alarmTime?.let {
+                alarmScheduler.scheduleAlarm(context, task.id, updated.title, it)
+            }
         }
     }
 
@@ -102,6 +194,7 @@ class TodayViewModel @Inject constructor(
     fun deleteTask(task: TaskEntity) {
         viewModelScope.launch {
             taskRepository.deleteTask(task)
+            alarmScheduler.cancelAlarm(context, task.id)
         }
     }
 }
@@ -114,18 +207,26 @@ fun TodayScreen(
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val habits by viewModel.habits.collectAsState()
+    
     var showAddDialog by remember { mutableStateOf(false) }
     var showHabitsDialog by remember { mutableStateOf(false) }
+    var selectedHabitForConfig by remember { mutableStateOf<HabitEntity?>(null) }
+    var selectedTaskForEdit by remember { mutableStateOf<TaskEntity?>(null) }
+
     val todayJalali = remember { JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis()) }
+
+    // Dynamic gradient backgrounds depending on Light/Dark mode
+    val isLight = MaterialTheme.colorScheme.background.toColorInt() == 0xFFF5F7FA.toInt()
+    val bgGradient = if (isLight) {
+        Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
+    } else {
+        Brush.verticalGradient(colors = listOf(GradientStart, GradientMiddle, GradientEnd))
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(GradientStart, GradientMiddle, GradientEnd)
-                )
-            )
+            .background(bgGradient)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
@@ -143,14 +244,14 @@ fun TodayScreen(
                         Text(
                             text = "امروز",
                             style = MaterialTheme.typography.headlineLarge,
-                            color = TextPrimary,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = todayJalali.format(),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -163,13 +264,13 @@ fun TodayScreen(
                     // Add from habits button
                     Button(
                         onClick = { showHabitsDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen.copy(alpha = 0.2f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen.copy(alpha = 0.15f)),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.glassCard(cornerRadius = 12.dp)
                     ) {
                         Icon(Icons.Default.Favorite, contentDescription = null, tint = AccentGreen)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("عادت‌ها", color = AccentGreen)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("عادت‌ها", color = AccentGreen, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -188,13 +289,13 @@ fun TodayScreen(
                         Text(
                             text = "هیچ کاری برنامه‌ریزی نشده",
                             style = MaterialTheme.typography.titleMedium,
-                            color = TextMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "روی دکمه + بزنید یا یک عادت انتخاب کنید",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }
@@ -204,13 +305,14 @@ fun TodayScreen(
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
                     items(tasks) { task ->
                         GlassTaskItem(
                             task = task,
                             onToggleComplete = { viewModel.toggleTaskComplete(task) },
-                            onDelete = { viewModel.deleteTask(task) }
+                            onDelete = { viewModel.deleteTask(task) },
+                            onClick = { selectedTaskForEdit = task }
                         )
                     }
                 }
@@ -233,8 +335,8 @@ fun TodayScreen(
         if (showAddDialog) {
             AddTaskDialog(
                 onDismiss = { showAddDialog = false },
-                onAdd = { title, desc, priority ->
-                    viewModel.addTask(title, desc, priority)
+                onAdd = { title, desc, priority, timeOfDay, hour, min ->
+                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min)
                     showAddDialog = false
                 }
             )
@@ -245,8 +347,30 @@ fun TodayScreen(
                 habits = habits,
                 onDismiss = { showHabitsDialog = false },
                 onSelect = { habit ->
-                    viewModel.addHabitAsTask(habit)
+                    selectedHabitForConfig = habit
                     showHabitsDialog = false
+                }
+            )
+        }
+
+        if (selectedHabitForConfig != null) {
+            ConfigureHabitDialog(
+                habitName = selectedHabitForConfig!!.name,
+                onDismiss = { selectedHabitForConfig = null },
+                onAdd = { title, desc, priority, timeOfDay, hour, min ->
+                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min)
+                    selectedHabitForConfig = null
+                }
+            )
+        }
+
+        if (selectedTaskForEdit != null) {
+            EditTaskDialog(
+                task = selectedTaskForEdit!!,
+                onDismiss = { selectedTaskForEdit = null },
+                onUpdate = { title, desc, priority, timeOfDay, hour, min ->
+                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min)
+                    selectedTaskForEdit = null
                 }
             )
         }
@@ -261,11 +385,11 @@ fun SelectHabitDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("انتخاب از عادت‌ها", color = TextPrimary) },
-        containerColor = GlassSecondaryDark,
+        title = { Text("انتخاب از عادت‌ها", color = MaterialTheme.colorScheme.onBackground) },
+        containerColor = MaterialTheme.colorScheme.surface,
         text = {
             if (habits.isEmpty()) {
-                Text("هنوز هیچ عادتی تعریف نکرده‌اید. ابتدا در بخش عادت‌ها یک عادت بسازید.", color = TextMuted)
+                Text("هنوز هیچ عادتی تعریف نکرده‌اید. ابتدا در بخش عادت‌ها یک عادت بسازید.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -276,11 +400,11 @@ fun SelectHabitDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onSelect(habit) },
-                            colors = CardDefaults.cardColors(containerColor = GlassSurfaceMedium)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             ListItem(
-                                headlineContent = { Text(habit.name, color = TextPrimary) },
-                                supportingContent = { habit.description?.let { Text(it, color = TextMuted) } },
+                                headlineContent = { Text(habit.name, color = MaterialTheme.colorScheme.onBackground) },
+                                supportingContent = { habit.description?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                             )
                         }
@@ -299,15 +423,110 @@ fun SelectHabitDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (String, String, Int) -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var priority by remember { mutableIntStateOf(0) }
+fun ConfigureHabitDialog(
+    habitName: String,
+    onDismiss: () -> Unit,
+    onAdd: (String, String, Int, String?, Int?, Int?) -> Unit
+) {
+    var desc by remember { mutableStateOf("عادت روزانه") }
+    var priority by remember { mutableIntStateOf(2) }
+    var timeOfDay by remember { mutableStateOf<String?>(null) }
+    var customHour by remember { mutableStateOf<Int?>(null) }
+    var customMinute by remember { mutableStateOf<Int?>(null) }
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("کار جدید", color = TextPrimary) },
-        containerColor = GlassSecondaryDark,
+        title = { Text("تنظیم عادت در برنامه روزانه", color = MaterialTheme.colorScheme.onBackground) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        text = {
+            Column {
+                Text("افزودن عادت «$habitName» به لیست کارهای امروز", style = MaterialTheme.typography.titleMedium, color = AccentGreen)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = desc,
+                    onValueChange = { desc = it },
+                    label = { Text("توضیح دلخواه برای امروز") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("اولویت:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
+                    priorities.forEach { (label, value) ->
+                        FilterChip(
+                            selected = priority == value,
+                            onClick = { priority = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("زمان انجام:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val times = listOf("صبح" to "MORNING", "عصر" to "AFTERNOON", "شب" to "NIGHT")
+                    times.forEach { (label, value) ->
+                        FilterChip(
+                            selected = timeOfDay == value,
+                            onClick = { 
+                                timeOfDay = if (timeOfDay == value) null else value
+                                customHour = null
+                                customMinute = null
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val current = Calendar.getInstance()
+                        TimePickerDialog(context, { _, h, m ->
+                            customHour = h
+                            customMinute = m
+                            timeOfDay = "CUSTOM"
+                        }, current.get(Calendar.HOUR_OF_DAY), current.get(Calendar.MINUTE), true).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue.copy(alpha = 0.2f))
+                ) {
+                    val timeText = if (timeOfDay == "CUSTOM" && customHour != null) {
+                        String.format("ساعت %02d:%02d", customHour, customMinute)
+                    } else {
+                        "تنظیم ساعت دلخواه آلارم"
+                    }
+                    Text(timeText, color = AccentBlue)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onAdd(habitName, desc, priority, timeOfDay, customHour, customMinute) }, colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)) {
+                Text("افزودن به امروز")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("انصراف") }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddTaskDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, String, Int, String?, Int?, Int?) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var priority by remember { mutableIntStateOf(0) }
+    var timeOfDay by remember { mutableStateOf<String?>(null) }
+    var customHour by remember { mutableStateOf<Int?>(null) }
+    var customMinute by remember { mutableStateOf<Int?>(null) }
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("کار جدید", color = MaterialTheme.colorScheme.onBackground) },
+        containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column {
                 OutlinedTextField(
@@ -326,23 +545,57 @@ fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (String, String, Int) -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("اولویت:", color = TextSecondary)
-                Spacer(modifier = Modifier.height(4.dp))
+                Text("اولویت:", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
                     priorities.forEach { (label, value) ->
                         FilterChip(
                             selected = priority == value,
                             onClick = { priority = value },
-                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(label) }
                         )
                     }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("زمان انجام کار (آلارم):", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val times = listOf("صبح (۹:۰۰)" to "MORNING", "عصر (۱۵:۰۰)" to "AFTERNOON", "شب (۲۱:۰۰)" to "NIGHT")
+                    times.forEach { (label, value) ->
+                        FilterChip(
+                            selected = timeOfDay == value,
+                            onClick = { 
+                                timeOfDay = if (timeOfDay == value) null else value
+                                customHour = null
+                                customMinute = null
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val current = Calendar.getInstance()
+                        TimePickerDialog(context, { _, h, m ->
+                            customHour = h
+                            customMinute = m
+                            timeOfDay = "CUSTOM"
+                        }, current.get(Calendar.HOUR_OF_DAY), current.get(Calendar.MINUTE), true).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue.copy(alpha = 0.2f))
+                ) {
+                    val timeText = if (timeOfDay == "CUSTOM" && customHour != null) {
+                        String.format("ساعت %02d:%02d", customHour, customMinute)
+                    } else {
+                        "ساعت دلخواه نوتیفیکیشن"
+                    }
+                    Text(timeText, color = AccentBlue)
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onAdd(title, description, priority) },
+                onClick = { onAdd(title, description, priority, timeOfDay, customHour, customMinute) },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
                 Text("ذخیره")
@@ -356,8 +609,127 @@ fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (String, String, Int) -> Unit) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GlassTaskItem(task: TaskEntity, onToggleComplete: () -> Unit, onDelete: () -> Unit) {
+fun EditTaskDialog(
+    task: TaskEntity,
+    onDismiss: () -> Unit,
+    onUpdate: (String, String, Int, String?, Int?, Int?) -> Unit
+) {
+    var title by remember { mutableStateOf(task.title) }
+    var description by remember { mutableStateOf(task.description ?: "") }
+    var priority by remember { mutableIntStateOf(task.priority) }
+    var timeOfDay by remember { mutableStateOf(task.timeOfDay) }
+    
+    // Parse custom hour/min if available from existing alarmTimeMillis
+    var customHour by remember {
+        mutableStateOf(task.alarmTimeMillis?.let {
+            val cal = Calendar.getInstance()
+            cal.timeInMillis = it
+            cal.get(Calendar.HOUR_OF_DAY)
+        })
+    }
+    var customMinute by remember {
+        mutableStateOf(task.alarmTimeMillis?.let {
+            val cal = Calendar.getInstance()
+            cal.timeInMillis = it
+            cal.get(Calendar.MINUTE)
+        })
+    }
+    
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ویرایش کار", color = MaterialTheme.colorScheme.onBackground) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("عنوان کار") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("توضیحات") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("اولویت:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
+                    priorities.forEach { (label, value) ->
+                        FilterChip(
+                            selected = priority == value,
+                            onClick = { priority = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("زمان انجام کار (آلارم):", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val times = listOf("صبح" to "MORNING", "عصر" to "AFTERNOON", "شب" to "NIGHT")
+                    times.forEach { (label, value) ->
+                        FilterChip(
+                            selected = timeOfDay == value,
+                            onClick = { 
+                                timeOfDay = if (timeOfDay == value) null else value
+                                customHour = null
+                                customMinute = null
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val current = Calendar.getInstance()
+                        TimePickerDialog(context, { _, h, m ->
+                            customHour = h
+                            customMinute = m
+                            timeOfDay = "CUSTOM"
+                        }, current.get(Calendar.HOUR_OF_DAY), current.get(Calendar.MINUTE), true).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue.copy(alpha = 0.2f))
+                ) {
+                    val timeText = if (timeOfDay == "CUSTOM" && customHour != null) {
+                        String.format("ساعت %02d:%02d", customHour, customMinute)
+                    } else {
+                        "تغییر ساعت نوتیفیکیشن"
+                    }
+                    Text(timeText, color = AccentBlue)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onUpdate(title, description, priority, timeOfDay, customHour, customMinute) },
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+            ) {
+                Text("بروزرسانی")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("انصراف") }
+        }
+    )
+}
+
+@Composable
+fun GlassTaskItem(
+    task: TaskEntity,
+    onToggleComplete: () -> Unit,
+    onDelete: () -> Unit,
+    onClick: () -> Unit
+) {
     val priorityColor = when (task.priority) {
         1 -> PriorityLow
         2 -> PriorityMedium
@@ -370,6 +742,7 @@ fun GlassTaskItem(task: TaskEntity, onToggleComplete: () -> Unit, onDelete: () -
         modifier = Modifier
             .fillMaxWidth()
             .glassCard()
+            .clickable { onClick() }
             .padding(16.dp)
     ) {
         Row(
@@ -389,15 +762,46 @@ fun GlassTaskItem(task: TaskEntity, onToggleComplete: () -> Unit, onDelete: () -
                 Text(
                     text = task.title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (task.isCompleted) TextMuted else TextPrimary,
-                    fontWeight = FontWeight.SemiBold
+                    color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                 )
                 if (!task.description.isNullOrEmpty()) {
                     Text(
                         text = task.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     )
+                }
+                
+                // Show alarm indicator if set
+                if (task.alarmTimeMillis != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = AccentBlue,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        val timeText = when (task.timeOfDay) {
+                            "MORNING" -> "صبح (۹:۰۰)"
+                            "AFTERNOON" -> "عصر (۱۵:۰۰)"
+                            "NIGHT" -> "شب (۲۱:۰۰)"
+                            else -> {
+                                val cal = Calendar.getInstance()
+                                cal.timeInMillis = task.alarmTimeMillis
+                                String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+                            }
+                        }
+                        Text(
+                            text = "یادآوری: $timeText",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AccentBlue
+                        )
+                    }
                 }
             }
 
@@ -405,7 +809,7 @@ fun GlassTaskItem(task: TaskEntity, onToggleComplete: () -> Unit, onDelete: () -
                 Icon(
                     Icons.Default.Check,
                     contentDescription = "تکمیل",
-                    tint = if (task.isCompleted) AccentGreen else TextMuted
+                    tint = if (task.isCompleted) AccentGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
             }
             IconButton(onClick = onDelete) {
@@ -417,4 +821,9 @@ fun GlassTaskItem(task: TaskEntity, onToggleComplete: () -> Unit, onDelete: () -
             }
         }
     }
+}
+
+// Simple color helper for light theme comparison
+private fun Color.toColorInt(): Int {
+    return ((value shr 32) and 0xffffffff).toInt()
 }

@@ -23,6 +23,7 @@ import com.example.lifeos.data.database.dao.HabitDao
 import com.example.lifeos.data.database.entities.HabitEntity
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
+import com.example.lifeos.util.JalaliCalendarUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,15 +59,29 @@ class HabitsViewModel @Inject constructor(
         }
     }
 
-    fun incrementStreak(habitId: String) {
-        viewModelScope.launch {
-            habitDao.incrementStreak(habitId)
+    fun toggleHabitStreak(habit: HabitEntity) {
+        val todayStr = JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis()).let {
+            String.format("%04d-%02d-%02d", it.year, it.month, it.day)
         }
-    }
-
-    fun resetStreak(habitId: String) {
+        
         viewModelScope.launch {
-            habitDao.resetStreak(habitId)
+            if (habit.lastCompletedDate == todayStr) {
+                // Toggle OFF: Decrement streak, clear date
+                val updated = habit.copy(
+                    currentStreak = maxOf(0, habit.currentStreak - 1),
+                    lastCompletedDate = null
+                )
+                habitDao.updateHabit(updated)
+            } else {
+                // Toggle ON: Increment streak, update date
+                val newStreak = habit.currentStreak + 1
+                val updated = habit.copy(
+                    currentStreak = newStreak,
+                    longestStreak = maxOf(habit.longestStreak, newStreak),
+                    lastCompletedDate = todayStr
+                )
+                habitDao.updateHabit(updated)
+            }
         }
     }
 }
@@ -76,20 +91,24 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
     val habits by viewModel.habits.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
 
+    // Dynamic gradient backgrounds depending on Light/Dark mode
+    val isLight = MaterialTheme.colorScheme.background.toColorInt() == 0xFFF5F7FA.toInt()
+    val bgGradient = if (isLight) {
+        Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
+    } else {
+        Brush.verticalGradient(colors = listOf(GradientStart, GradientMiddle, GradientEnd))
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(GradientStart, GradientMiddle, GradientEnd)
-                )
-            )
+            .background(bgGradient)
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Text(
                 text = "عادت‌های روزانه",
                 style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -102,8 +121,8 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("💪", style = MaterialTheme.typography.displayLarge)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("هنوز عادتی تعریف نشده", color = TextMuted, style = MaterialTheme.typography.titleMedium)
-                        Text("عادت‌های مفید را اضافه کنید تا پیشرفتتان را ببینید", color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                        Text("هنوز عادتی تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), style = MaterialTheme.typography.titleMedium)
+                        Text("عادت‌های مفید را اضافه کنید تا پیشرفتتان را ببینید", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             } else {
@@ -112,10 +131,17 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
                     items(habits) { habit ->
+                        val todayStr = remember {
+                            JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis()).let {
+                                String.format("%04d-%02d-%02d", it.year, it.month, it.day)
+                            }
+                        }
+                        val isCheckedToday = habit.lastCompletedDate == todayStr
+                        
                         HabitCard(
                             habit = habit,
-                            onCheck = { viewModel.incrementStreak(habit.id) },
-                            onReset = { viewModel.resetStreak(habit.id) }
+                            isCheckedToday = isCheckedToday,
+                            onToggle = { viewModel.toggleHabitStreak(habit) }
                         )
                     }
                 }
@@ -144,23 +170,27 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
 }
 
 @Composable
-fun HabitCard(habit: HabitEntity, onCheck: () -> Unit, onReset: () -> Unit) {
+fun HabitCard(
+    habit: HabitEntity,
+    isCheckedToday: Boolean,
+    onToggle: () -> Unit
+) {
     Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = habit.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.SemiBold
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
                 )
                 habit.description?.let {
-                    Text(it, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     Column {
-                        Text("رکورد فعلی", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        Text("رکورد فعلی", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         Text(
                             "${habit.currentStreak} روز",
                             style = MaterialTheme.typography.titleLarge,
@@ -169,7 +199,7 @@ fun HabitCard(habit: HabitEntity, onCheck: () -> Unit, onReset: () -> Unit) {
                         )
                     }
                     Column {
-                        Text("بهترین رکورد", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        Text("بهترین رکورد", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         Text(
                             "${habit.longestStreak} روز",
                             style = MaterialTheme.typography.titleLarge,
@@ -180,14 +210,24 @@ fun HabitCard(habit: HabitEntity, onCheck: () -> Unit, onReset: () -> Unit) {
                 }
             }
 
-            IconButton(onClick = onCheck) {
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier.background(
+                    if (isCheckedToday) AccentGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+                    CircleShape
+                )
+            ) {
                 Icon(
                     Icons.Default.Check,
                     contentDescription = "انجام دادم",
-                    tint = AccentGreen,
-                    modifier = Modifier.size(32.dp)
+                    tint = if (isCheckedToday) AccentGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
     }
+}
+
+private fun Color.toColorInt(): Int {
+    return ((value shr 32) and 0xffffffff).toInt()
 }

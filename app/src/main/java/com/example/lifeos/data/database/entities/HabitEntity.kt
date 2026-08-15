@@ -16,5 +16,6 @@ data class HabitEntity(
     val goalId: String? = null,
     val currentStreak: Int = 0,
     val longestStreak: Int = 0,
+    val lastCompletedDate: String? = null, // yyyy-MM-dd
     val createdAtMillis: Long = System.currentTimeMillis()
 )

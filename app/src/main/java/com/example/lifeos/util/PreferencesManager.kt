@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,6 +22,7 @@ class PreferencesManager @Inject constructor(
     companion object {
         val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
         val NOTIFICATIONS_KEY = booleanPreferencesKey("notifications_enabled")
+        val API_KEY = stringPreferencesKey("gemini_api_key")
     }
 
     val isDarkMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -29,6 +31,10 @@ class PreferencesManager @Inject constructor(
 
     val isNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[NOTIFICATIONS_KEY] ?: true
+    }
+
+    val apiKey: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[API_KEY] ?: ""
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -40,6 +46,12 @@ class PreferencesManager @Inject constructor(
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[NOTIFICATIONS_KEY] = enabled
+        }
+    }
+
+    suspend fun setApiKey(key: String) {
+        context.dataStore.edit { prefs ->
+            prefs[API_KEY] = key
         }
     }
 }
