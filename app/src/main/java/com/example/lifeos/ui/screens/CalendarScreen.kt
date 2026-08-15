@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,7 +36,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.Calendar
 import java.util.UUID
 import javax.inject.Inject
 
@@ -63,23 +64,18 @@ class CalendarViewModel @Inject constructor(
     fun addTaskForDate(title: String, description: String, priority: Int, year: Int, month: Int, day: Int) {
         if (title.isBlank()) return
         viewModelScope.launch {
-            // Find Gregorian equivalent timestamp
-            // Naive conversion for standard timezone
-            val jalali = JalaliCalendarUtil.JalaliDate(year, month, day)
-            val gregorianCal = Calendar.getInstance()
-            
-            // To approximate, we calculate delta in days from today
-            val todayJalali = JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis())
-            val deltaDays = (year - todayJalali.year) * 365 + (month - todayJalali.month) * 30 + (day - todayJalali.day)
-            
-            gregorianCal.add(Calendar.DAY_OF_YEAR, deltaDays)
-            
+            // Use the real Jalali -> Gregorian conversion (accurate across leap
+            // years and variable month lengths) instead of a *365/*30 day
+            // delta approximation, which used to drift the due date by several
+            // days depending on how far the target date was from today.
+            val dueDateMillis = JalaliCalendarUtil.jalaliToGregorian(year, month, day)
+
             val task = TaskEntity(
                 id = UUID.randomUUID().toString(),
                 title = title,
                 description = description.ifBlank { null },
                 priority = priority,
-                dueDateMillis = gregorianCal.timeInMillis
+                dueDateMillis = dueDateMillis
             )
             taskRepository.insertTask(task)
             loadTasksForDate(year, month, day)
@@ -93,16 +89,48 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
     val todayJalali = remember {
         JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis())
     }
+
+    // The month/year currently being *viewed* can now differ from today's
+    // month/year — previously the calendar was permanently stuck showing only
+    // the current month with no way to navigate to other months.
+    var viewedYear by remember { mutableIntStateOf(todayJalali.year) }
+    var viewedMonth by remember { mutableIntStateOf(todayJalali.month) }
     var selectedDay by remember { mutableIntStateOf(todayJalali.day) }
+
     val selectedDayTasks by viewModel.selectedDayTasks.collectAsState()
     var showAddTaskDialog by remember { mutableStateOf(false) }
 
-    val daysInMonth = if (todayJalali.month <= 6) 31 else if (todayJalali.month == 12) 29 else 30
+    // Correctly accounts for Esfand having 29 or 30 days depending on whether
+    // the Jalali year is a leap year.
+    val daysInMonth = JalaliCalendarUtil.daysInJalaliMonth(viewedYear, viewedMonth)
     val daysList = (1..daysInMonth).toList()
     val weekDays = listOf("ش", "ی", "د", "س", "چ", "پ", "ج")
+    val viewedMonthName = remember(viewedYear, viewedMonth) {
+        JalaliCalendarUtil.JalaliDate(viewedYear, viewedMonth, 1).monthName
+    }
 
-    LaunchedEffect(selectedDay) {
-        viewModel.loadTasksForDate(todayJalali.year, todayJalali.month, selectedDay)
+    fun goToPreviousMonth() {
+        if (viewedMonth == 1) {
+            viewedMonth = 12
+            viewedYear -= 1
+        } else {
+            viewedMonth -= 1
+        }
+        selectedDay = 1
+    }
+
+    fun goToNextMonth() {
+        if (viewedMonth == 12) {
+            viewedMonth = 1
+            viewedYear += 1
+        } else {
+            viewedMonth += 1
+        }
+        selectedDay = 1
+    }
+
+    LaunchedEffect(selectedDay, viewedMonth, viewedYear) {
+        viewModel.loadTasksForDate(viewedYear, viewedMonth, selectedDay)
     }
 
     // Dynamic gradient backgrounds depending on Light/Dark mode
@@ -123,14 +151,34 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Month Header
-            Text(
-                text = "${todayJalali.monthName} ${todayJalali.year}",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            // Month Header with navigation
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { goToNextMonth() }) {
+                    // RTL layout: "next" visually reads as the left-pointing arrow
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "ماه بعد",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                Text(
+                    text = "$viewedMonthName $viewedYear",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = { goToPreviousMonth() }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "ماه قبل",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            }
 
             // Weekday Headers
             Box(modifier = Modifier.fillMaxWidth().glassCard(cornerRadius = 16.dp).padding(8.dp)) {
@@ -157,7 +205,9 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                 modifier = Modifier.heightIn(max = 240.dp)
             ) {
                 items(daysList) { day ->
-                    val isToday = day == todayJalali.day
+                    val isToday = day == todayJalali.day &&
+                        viewedMonth == todayJalali.month &&
+                        viewedYear == todayJalali.year
                     val isSelected = day == selectedDay
 
                     Box(
@@ -197,7 +247,7 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "کارهای روز $selectedDay ${todayJalali.monthName}",
+                    text = "کارهای روز $selectedDay $viewedMonthName",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.SemiBold
@@ -250,7 +300,7 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
             SimpleAddTaskForDateDialog(
                 onDismiss = { showAddTaskDialog = false },
                 onAdd = { title, desc, priority ->
-                    viewModel.addTaskForDate(title, desc, priority, todayJalali.year, todayJalali.month, selectedDay)
+                    viewModel.addTaskForDate(title, desc, priority, viewedYear, viewedMonth, selectedDay)
                     showAddTaskDialog = false
                 }
             )
@@ -298,5 +348,3 @@ fun SimpleAddTaskForDateDialog(onDismiss: () -> Unit, onAdd: (String, String, In
         }
     )
 }
-
-
