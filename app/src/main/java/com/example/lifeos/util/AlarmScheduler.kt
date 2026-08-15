@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,11 +27,39 @@ class AlarmScheduler @Inject constructor() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAtMillis,
-            pendingIntent
-        )
+        // On Android 12+ (S), scheduling an *exact* alarm requires the
+        // SCHEDULE_EXACT_ALARM/USE_EXACT_ALARM permission to actually be granted
+        // (declaring it in the manifest alone is not enough on some OEMs/versions).
+        // If it's not available, fall back to an inexact-but-still-timely alarm
+        // instead of letting setExactAndAllowWhileIdle throw a SecurityException.
+        val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true
+        }
+
+        try {
+            if (canScheduleExact) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            }
+        } catch (e: SecurityException) {
+            // Extremely defensive fallback: some OEMs revoke the permission after grant.
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+        }
     }
 
     fun cancelAlarm(context: Context, taskId: String) {
