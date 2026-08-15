@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
@@ -433,7 +434,8 @@ class TodayViewModel @Inject constructor(
 @Composable
 fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel(),
-    onAddTaskClick: () -> Unit = {}
+    onAddTaskClick: () -> Unit = {},
+    onStartFocus: (TaskEntity) -> Unit = {}
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val habits by viewModel.habits.collectAsState()
@@ -553,7 +555,8 @@ fun TodayScreen(
                             task = task,
                             onToggleComplete = { viewModel.toggleTaskComplete(task) },
                             onDelete = { viewModel.deleteTask(task) },
-                            onClick = { selectedTaskForEdit = task }
+                            onClick = { selectedTaskForEdit = task },
+                            onStartFocus = { onStartFocus(task) }
                         )
                     }
                 }
@@ -1195,7 +1198,8 @@ fun GlassTaskItem(
     task: TaskEntity,
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onStartFocus: () -> Unit = {}
 ) {
     val priorityColor = when (task.priority) {
         1 -> PriorityLow
@@ -1272,6 +1276,15 @@ fun GlassTaskItem(
                 }
             }
 
+            if (!task.isCompleted) {
+                IconButton(onClick = onStartFocus) {
+                    Icon(
+                        Icons.Default.Bolt,
+                        contentDescription = "شروع فوکوس",
+                        tint = AccentBlue.copy(alpha = 0.8f)
+                    )
+                }
+            }
             IconButton(onClick = onToggleComplete) {
                 Icon(
                     Icons.Default.Check,

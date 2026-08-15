@@ -1,6 +1,7 @@
 package com.example.lifeos.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Flag
@@ -18,11 +19,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.navArgument
 import com.example.lifeos.ui.screens.AIChatScreen
 import com.example.lifeos.ui.screens.CalendarScreen
+import com.example.lifeos.ui.screens.FocusScreen
 import com.example.lifeos.ui.screens.HabitsScreen
 import com.example.lifeos.ui.screens.ProjectsScreen
 import com.example.lifeos.ui.screens.RoutinesScreen
@@ -31,11 +35,22 @@ import com.example.lifeos.ui.screens.TodayScreen
 import com.example.lifeos.ui.theme.*
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    // baseRoute is what bottom-nav taps navigate to and what selection
+    // highlighting compares against. For most screens it's identical to
+    // route; Focus overrides it because its route pattern carries an
+    // optional {taskId} argument that only "Start Focus" (from a task)
+    // fills in, not a plain tab tap.
+    open val baseRoute: String get() = route
+
     object Today : Screen("today", "امروز", Icons.Default.Home)
     object Calendar : Screen("calendar", "تقویم", Icons.Default.DateRange)
     object Projects : Screen("projects", "اهداف", Icons.Default.Flag)
     object Habits : Screen("habits", "عادت‌ها", Icons.Default.FavoriteBorder)
     object Routines : Screen("routines", "روتین‌ها", Icons.Default.Repeat)
+    object Focus : Screen("focus?taskId={taskId}", "فوکوس", Icons.Default.Bolt) {
+        override val baseRoute = "focus"
+        fun routeForTask(taskId: String) = "focus?taskId=$taskId"
+    }
     object AIChat : Screen("ai_chat", "دستیار", Icons.Default.Star)
     object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
 }
@@ -46,6 +61,7 @@ val bottomNavItems = listOf(
     Screen.Projects,
     Screen.Habits,
     Screen.Routines,
+    Screen.Focus,
     Screen.AIChat,
     Screen.Settings
 )
@@ -61,7 +77,11 @@ fun LifeOSNavHost(
         modifier = modifier
     ) {
         composable(Screen.Today.route) {
-            TodayScreen()
+            TodayScreen(
+                onStartFocus = { task ->
+                    navController.navigate(Screen.Focus.routeForTask(task.id))
+                }
+            )
         }
         composable(Screen.Calendar.route) {
             CalendarScreen()
@@ -74,6 +94,18 @@ fun LifeOSNavHost(
         }
         composable(Screen.Routines.route) {
             RoutinesScreen()
+        }
+        composable(
+            route = Screen.Focus.route,
+            arguments = listOf(
+                navArgument("taskId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            FocusScreen(preselectTaskId = backStackEntry.arguments?.getString("taskId"))
         }
         composable(Screen.AIChat.route) {
             AIChatScreen()
@@ -98,6 +130,9 @@ fun LifeOSBottomNav(navController: NavHostController) {
         val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
 
         bottomNavItems.forEach { screen ->
+            // Compare against route (the destination's registered pattern,
+            // e.g. "focus?taskId={taskId}") so Focus stays highlighted
+            // whether the user tapped the tab or arrived via "Start Focus".
             val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
             NavigationBarItem(
                 icon = {
@@ -115,7 +150,10 @@ fun LifeOSBottomNav(navController: NavHostController) {
                 },
                 selected = isSelected,
                 onClick = {
-                    navController.navigate(screen.route) {
+                    // Navigate to baseRoute (no arguments) so tapping the
+                    // tab always opens a clean Focus screen rather than
+                    // re-using whatever {taskId} was last on the back stack.
+                    navController.navigate(screen.baseRoute) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }

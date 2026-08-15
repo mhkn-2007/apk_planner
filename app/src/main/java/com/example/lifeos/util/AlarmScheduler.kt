@@ -49,6 +49,32 @@ class AlarmScheduler @Inject constructor() {
         cancelAlarmInternal(context, requestKey = reminderId)
     }
 
+    /**
+     * Schedules the "session finished" alarm for a Focus/Pomodoro session
+     * (prompt section 18) so the user is notified even if LifeOS isn't in
+     * the foreground when the timer reaches zero. Keyed by [sessionId] so a
+     * concurrent reminder/other focus session never overwrites this one.
+     */
+    fun scheduleFocusSessionAlarm(
+        context: Context,
+        sessionId: String,
+        message: String,
+        triggerAtMillis: Long
+    ) {
+        scheduleAlarmInternal(
+            context,
+            requestKey = "focus_$sessionId",
+            taskId = sessionId,
+            title = "پایان جلسه‌ی فوکوس",
+            message = message,
+            triggerAtMillis = triggerAtMillis
+        )
+    }
+
+    fun cancelFocusSessionAlarm(context: Context, sessionId: String) {
+        cancelAlarmInternal(context, requestKey = "focus_$sessionId")
+    }
+
     private fun scheduleAlarmInternal(
         context: Context,
         requestKey: String,

@@ -77,7 +77,13 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 
 ### 🔴 ۲.۴ — بخش ۱۸ (Focus Mode): اصلاً وجود نداره
 هیچ Pomodoro، هیچ `FocusSession` entity، هیچ صفحه‌ای.
-**وضعیت: فاز بعدی.**
+**وضعیت: فیکس شد (فاز ۵).**
+- `FocusSessionEntity` + `FocusSessionDao` اضافه شدن (اتصال اختیاری به `taskId`، نوع WORK/SHORT_BREAK/LONG_BREAK، مدت برنامه‌ریزی‌شده در برابر مدت واقعی طی‌شده، و `wasCompleted` برای تفکیک جلسات کامل‌شده از قطع‌شده).
+- `FocusScreen`/`FocusViewModel` اضافه شد: تایمر Pomodoro کامل با سه نوع جلسه (فوکوس/استراحت کوتاه/استراحت بلند)، چرخه‌ی خودکار بعد از هر ۴ جلسه‌ی فوکوس به استراحت بلند، مدت‌زمان‌های قابل‌تنظیم توسط کاربر، و تاریخچه‌ی جلسات.
+- کاربر می‌تونه مستقیماً از روی هر تسک در `TodayScreen` («شروع فوکوس» با آیکون ⚡) وارد Focus Mode بشه؛ جلسه به همون تسک وصل می‌شه (بخش ۱۸: "Users should be able to start Focus Mode directly from a task").
+- پایان جلسه هم از طریق تایمر زنده‌ی UI و هم با یک الارم دقیق (`AlarmScheduler.scheduleFocusSessionAlarm`, همون مکانیزم یادآوری تسک‌ها) اطلاع داده می‌شه، تا اگه کاربر از اپ بیرون بره بازم نوتیف بگیره.
+- به bottom nav اضافه شد (بخش ۵).
+- **هنوز پیاده نشده:** نمایش مجموع زمان فوکوس روی خود صفحه‌ی جزئیات تسک (متد `totalFocusSecondsForTask` در ViewModel آماده‌ست ولی هنوز به UI تسک وصل نشده) و آمار جلسات فوکوس در بخش Analytics (فاز ۶).
 
 ### 🔴 ۲.۵ — بخش ۱۹ (Analytics): اصلاً وجود نداره
 هیچ داشبورد آماری، هیچ `AnalyticsEvent` entity.
@@ -110,6 +116,7 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 - `HabitLogEntity` + `HabitLogDao` این نوبت اضافه شد (تاریخچه‌ی روزانه‌ی تکمیل هر عادت، هم از چک‌این دستی در `HabitsScreen` و هم از تکمیل تسک‌های وصل‌شده به عادت در `TodayScreen`) — پایه‌ی داده‌ای لازم برای آمار هفتگی/ماهانه‌ی بخش ۱۷.
 - `UserPreference` عمداً به‌صورت Entity جدا اضافه نشد چون همین الان با `PreferencesManager`/DataStore پیاده‌سازی شده (معماری درست‌تر از یک جدول Room برای key-value ساده).
 - `CalendarEvent`, `FocusSession`, `AIConversation`, `AIMessage`, `AIAction`, `AnalyticsEvent` هنوز جا افتاده‌ن چون به فیچرهای پیاده‌نشده‌ی خودشون وابسته‌ن (Focus Mode = فاز ۵، Analytics = فاز ۶، AI Tool Layer = فاز ۴)؛ ساختن Entity بدون اون فیچرها طبق اصل «no fake functionality» بی‌فایده‌ست.
+  - بخش `FocusSession` این نوبت با فاز ۵ اضافه شد؛ `CalendarEvent`, `AIConversation`, `AIMessage`, `AIAction`, `AnalyticsEvent` هنوز جا افتاده‌ن.
 - `Category`/`Tag` عمداً اضافه نشدن: در هیچ صفحه‌ای استفاده نمی‌شن، پس یک Entity/DAO بی‌UI فقط کد مرده‌ی جدید می‌سازه؛ باید همراه با UI فیلتر/دسته‌بندی تسک به‌عنوان یک فیچر مجزا کار بشه.
 - `User` نیازمند تصمیم معماری احراز هویت (local-only vs backend) هست، در بخش ۵۱ پرامپت هم به‌عنوان «authentication-ready» (نه لزوماً پیاده‌شده) خواسته شده؛ فاز بعدی.
 
@@ -135,11 +142,11 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 2. ✅ فاز ۲: DAO های گمشده (Subtask, Reminder, Routine) + اتصال به UI — **انجام شد**
 3. ✅ فاز ۳: پیاده‌سازی Routines (Template/Instance) با UI کامل — **انجام شد**
 4. ✅ فاز ۴: پیاده‌سازی AI Tool Layer واقعی + Read/Action Tools + اتصال به یک Provider واقعی (Gemini، با کلید وارد‌شده توسط کاربر در Settings) — **انجام شد**
-5. فاز ۵: Focus Mode — **هنوز مونده**
+5. ✅ فاز ۵: Focus Mode — **انجام شد**
 6. فاز ۶: Analytics — **هنوز مونده (پایه‌ی `HabitLog` برای آمار عادت‌ها آماده شد)**
 7. ✅ فاز ۷: Goals/Projects Milestones + اتصال کامل زنجیره‌ی Goal→Project→Task — **انجام شد**
 8. ✅ فاز ۸: Recurring Tasks — **انجام شد**
-9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks/Goals/Focus/Analytics هنوز صفحه‌ی مستقل تو bottom nav ندارن) — **هنوز مونده**
-10. ✅ تکمیل جزئی ۲.۱۰ (Data model — `HabitLog`) و ۲.۱۱ (حذف کد مرده‌ی `ReminderWorker`) — **انجام شد**
+9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks/Goals/Analytics هنوز صفحه‌ی مستقل تو bottom nav ندارن؛ Focus این نوبت اضافه شد) — **بخشی انجام شد**
+10. ✅ تکمیل جزئی ۲.۱۰ (Data model — `HabitLog`, `FocusSession`) و ۲.۱۱ (حذف کد مرده‌ی `ReminderWorker`) — **انجام شد**
 
-بزرگترین کار باقی‌مانده حالا فاز‌های ۵ و ۶ (Focus Mode و Analytics) و تکمیل نهایی سیستم AI (برنامه‌ریزی روزانه/هفتگی خودکار، حافظه‌ی مکالمه‌ی پایدار) هستن.
+بزرگترین کار باقی‌مانده حالا فاز ۶ (Analytics) و تکمیل نهایی سیستم AI (برنامه‌ریزی روزانه/هفتگی خودکار، حافظه‌ی مکالمه‌ی پایدار) هستن.

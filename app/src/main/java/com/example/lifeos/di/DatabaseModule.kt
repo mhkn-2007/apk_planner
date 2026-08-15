@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.lifeos.data.database.LifeOSDatabase
 import com.example.lifeos.data.database.TaskRepositoryImpl
+import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
 import com.example.lifeos.data.database.dao.HabitLogDao
@@ -78,6 +79,11 @@ object DatabaseModule {
     @Provides
     fun provideMilestoneDao(database: LifeOSDatabase): MilestoneDao {
         return database.milestoneDao()
+    }
+
+    @Provides
+    fun provideFocusSessionDao(database: LifeOSDatabase): FocusSessionDao {
+        return database.focusSessionDao()
     }
 
     @Provides
