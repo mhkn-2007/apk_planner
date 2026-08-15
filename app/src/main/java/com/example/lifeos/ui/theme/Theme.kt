@@ -54,7 +54,7 @@ fun LifeOSTheme(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = LifeOSTypography,
+            typography = Typography,
             content = content
         )
     }
