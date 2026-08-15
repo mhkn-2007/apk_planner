@@ -1,0 +1,95 @@
+package com.example.lifeos.ui.navigation
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.example.lifeos.ui.screens.AIChatScreen
+import com.example.lifeos.ui.screens.TodayScreen
+import com.example.lifeos.ui.screens.CalendarScreen
+import com.example.lifeos.ui.screens.ProjectsScreen
+import com.example.lifeos.ui.screens.SettingsScreen
+
+sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    object Today : Screen("today", "امروز", Icons.Default.Home)
+    object Calendar : Screen("calendar", "تقویم", Icons.Default.DateRange)
+    object Projects : Screen("projects", "پروژه‌ها", Icons.Default.Build) // Using build as placeholder
+    object AIChat : Screen("ai_chat", "دستیار", Icons.Default.Star)
+    object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
+}
+
+val bottomNavItems = listOf(
+    Screen.Today,
+    Screen.Calendar,
+    Screen.Projects,
+    Screen.AIChat,
+    Screen.Settings
+)
+
+@Composable
+fun LifeOSNavHost(
+    navController: NavHostController,
+    modifier: Modifier = Modifier
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.Today.route,
+        modifier = modifier
+    ) {
+        composable(Screen.Today.route) {
+            TodayScreen(onAddTaskClick = { /* Handle Add */ })
+        }
+        composable(Screen.Calendar.route) {
+            CalendarScreen()
+        }
+        composable(Screen.Projects.route) {
+            ProjectsScreen()
+        }
+        composable(Screen.AIChat.route) {
+            AIChatScreen()
+        }
+        composable(Screen.Settings.route) {
+            SettingsScreen()
+        }
+    }
+}
+
+@Composable
+fun LifeOSBottomNav(navController: NavHostController) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentDestination = navBackStackEntry?.destination
+
+        bottomNavItems.forEach { screen ->
+            NavigationBarItem(
+                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                label = { Text(screen.title) },
+                selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                onClick = {
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+    }
+}
