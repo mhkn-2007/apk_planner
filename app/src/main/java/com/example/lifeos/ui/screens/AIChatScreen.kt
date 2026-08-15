@@ -20,6 +20,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lifeos.ai.provider.AIProvider
+import com.example.lifeos.data.database.entities.TaskEntity
+import com.example.lifeos.domain.repositories.TaskRepository
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import java.util.UUID
 
 data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -37,7 +40,8 @@ data class ChatMessage(
 
 @HiltViewModel
 class AIChatViewModel @Inject constructor(
-    private val aiProvider: AIProvider
+    private val aiProvider: AIProvider,
+    private val taskRepository: TaskRepository
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -45,6 +49,16 @@ class AIChatViewModel @Inject constructor(
 
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
+
+    init {
+        // Welcome message
+        _messages.value = listOf(
+            ChatMessage(
+                text = "سلام! من دستیار هوشمند شما هستم. می‌توانید کارهای روزمره خود را به صورت متنی بنویسید (مثلاً: «تسک جدید خرید کتاب») تا من آن را به لیست امروز شما اضافه کنم.",
+                isUser = false
+            )
+        )
+    }
 
     fun sendMessage(text: String) {
         if (text.isBlank()) return
@@ -60,8 +74,33 @@ class AIChatViewModel @Inject constructor(
 
             _messages.value = _messages.value + ChatMessage(id = aiMsgId, text = currentAiText, isUser = false)
 
+            // Simple Offline NLP parser for direct database insertion
+            var actionConfirmation = ""
+            val cleaned = text.trim()
+            if (cleaned.contains("افزودن") || cleaned.contains("تسک") || cleaned.contains("کار") || cleaned.contains("بنویس") || cleaned.contains("ثبت")) {
+                val taskTitle = cleaned
+                    .replace("افزودن", "")
+                    .replace("تسک", "")
+                    .replace("کار جدید", "")
+                    .replace("کار", "")
+                    .replace("بنویس", "")
+                    .replace("ثبت", "")
+                    .trim()
+                
+                if (taskTitle.isNotBlank()) {
+                    taskRepository.insertTask(
+                        TaskEntity(
+                            id = UUID.randomUUID().toString(),
+                            title = taskTitle,
+                            dueDateMillis = System.currentTimeMillis()
+                        )
+                    )
+                    actionConfirmation = "\n\n(انجام شد! کار «$taskTitle» به لیست امروز شما اضافه گردید.)"
+                }
+            }
+
             aiProvider.streamChat(text, "context: user scheduling").collect { chunk ->
-                currentAiText = chunk
+                currentAiText = chunk + actionConfirmation
                 _messages.value = _messages.value.map {
                     if (it.id == aiMsgId) it.copy(text = currentAiText) else it
                 }
@@ -127,7 +166,7 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
                 }
             }
 
-            // Input Row
+            // Input Row with high-contrast text styling
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -147,8 +186,11 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent,
                             unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.Black.copy(alpha = 0.35f),
+                            unfocusedContainerColor = Color.Black.copy(alpha = 0.2f),
                             focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
+                            unfocusedTextColor = TextPrimary,
+                            cursorColor = AccentBlue
                         ),
                         shape = RoundedCornerShape(24.dp)
                     )

@@ -37,8 +37,19 @@ class SettingsViewModel @Inject constructor(
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
-    val isDarkMode by viewModel.isDarkMode.collectAsState(initial = false)
-    val notificationsEnabled by viewModel.isNotificationsEnabled.collectAsState(initial = true)
+    val isDarkModeFlow by viewModel.isDarkMode.collectAsState(initial = false)
+    val notificationsEnabledFlow by viewModel.isNotificationsEnabled.collectAsState(initial = true)
+
+    // Using local state initialized from Flow to ensure instant visual updates on toggle
+    var isDarkMode by remember { mutableStateOf(false) }
+    var notificationsEnabled by remember { mutableStateOf(true) }
+
+    LaunchedEffect(isDarkModeFlow) {
+        isDarkMode = isDarkModeFlow
+    }
+    LaunchedEffect(notificationsEnabledFlow) {
+        notificationsEnabled = notificationsEnabledFlow
+    }
 
     Box(
         modifier = Modifier
@@ -74,7 +85,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     }
                     Switch(
                         checked = isDarkMode,
-                        onCheckedChange = { viewModel.setDarkMode(it) },
+                        onCheckedChange = { 
+                            isDarkMode = it
+                            viewModel.setDarkMode(it) 
+                        },
                         colors = SwitchDefaults.colors(checkedTrackColor = AccentBlue)
                     )
                 }
@@ -94,7 +108,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     }
                     Switch(
                         checked = notificationsEnabled,
-                        onCheckedChange = { viewModel.setNotificationsEnabled(it) },
+                        onCheckedChange = { 
+                            notificationsEnabled = it
+                            viewModel.setNotificationsEnabled(it) 
+                        },
                         colors = SwitchDefaults.colors(checkedTrackColor = AccentGreen)
                     )
                 }
