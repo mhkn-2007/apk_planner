@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -24,6 +25,7 @@ import com.example.lifeos.ui.screens.AIChatScreen
 import com.example.lifeos.ui.screens.CalendarScreen
 import com.example.lifeos.ui.screens.HabitsScreen
 import com.example.lifeos.ui.screens.ProjectsScreen
+import com.example.lifeos.ui.screens.RoutinesScreen
 import com.example.lifeos.ui.screens.SettingsScreen
 import com.example.lifeos.ui.screens.TodayScreen
 import com.example.lifeos.ui.theme.*
@@ -33,6 +35,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Calendar : Screen("calendar", "تقویم", Icons.Default.DateRange)
     object Projects : Screen("projects", "اهداف", Icons.Default.Flag)
     object Habits : Screen("habits", "عادت‌ها", Icons.Default.FavoriteBorder)
+    object Routines : Screen("routines", "روتین‌ها", Icons.Default.Repeat)
     object AIChat : Screen("ai_chat", "دستیار", Icons.Default.Star)
     object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
 }
@@ -42,6 +45,7 @@ val bottomNavItems = listOf(
     Screen.Calendar,
     Screen.Projects,
     Screen.Habits,
+    Screen.Routines,
     Screen.AIChat,
     Screen.Settings
 )
@@ -67,6 +71,9 @@ fun LifeOSNavHost(
         }
         composable(Screen.Habits.route) {
             HabitsScreen()
+        }
+        composable(Screen.Routines.route) {
+            RoutinesScreen()
         }
         composable(Screen.AIChat.route) {
             AIChatScreen()
