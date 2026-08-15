@@ -70,7 +70,11 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideTaskRepository(taskDao: TaskDao): TaskRepository {
-        return TaskRepositoryImpl(taskDao)
+    fun provideTaskRepository(
+        taskDao: TaskDao,
+        subtaskDao: SubtaskDao,
+        reminderDao: ReminderDao
+    ): TaskRepository {
+        return TaskRepositoryImpl(taskDao, subtaskDao, reminderDao)
     }
 }

@@ -1,13 +1,19 @@
 package com.example.lifeos.data.database
 
+import com.example.lifeos.data.database.dao.ReminderDao
+import com.example.lifeos.data.database.dao.SubtaskDao
 import com.example.lifeos.data.database.dao.TaskDao
+import com.example.lifeos.data.database.entities.ReminderEntity
+import com.example.lifeos.data.database.entities.SubtaskEntity
 import com.example.lifeos.data.database.entities.TaskEntity
 import com.example.lifeos.domain.repositories.TaskRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 class TaskRepositoryImpl @Inject constructor(
-    private val taskDao: TaskDao
+    private val taskDao: TaskDao,
+    private val subtaskDao: SubtaskDao,
+    private val reminderDao: ReminderDao
 ) : TaskRepository {
     override suspend fun insertTask(task: TaskEntity) {
         taskDao.insertTask(task)
@@ -31,5 +37,37 @@ class TaskRepositoryImpl @Inject constructor(
 
     override fun getTasksForDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TaskEntity>> {
         return taskDao.getTasksForDateRange(startOfDay, endOfDay)
+    }
+
+    override fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>> {
+        return subtaskDao.getSubtasksForTask(taskId)
+    }
+
+    override suspend fun insertSubtask(subtask: SubtaskEntity) {
+        subtaskDao.insertSubtask(subtask)
+    }
+
+    override suspend fun updateSubtask(subtask: SubtaskEntity) {
+        subtaskDao.updateSubtask(subtask)
+    }
+
+    override suspend fun deleteSubtask(subtask: SubtaskEntity) {
+        subtaskDao.deleteSubtask(subtask)
+    }
+
+    override fun getRemindersForTask(taskId: String): Flow<List<ReminderEntity>> {
+        return reminderDao.getRemindersForTask(taskId)
+    }
+
+    override suspend fun insertReminder(reminder: ReminderEntity) {
+        reminderDao.insertReminder(reminder)
+    }
+
+    override suspend fun updateReminder(reminder: ReminderEntity) {
+        reminderDao.updateReminder(reminder)
+    }
+
+    override suspend fun deleteReminder(reminder: ReminderEntity) {
+        reminderDao.deleteReminder(reminder)
     }
 }
