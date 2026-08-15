@@ -23,8 +23,8 @@ interface HabitDao {
     @Query("SELECT * FROM habits ORDER BY createdAtMillis DESC")
     fun getAllHabits(): Flow<List<HabitEntity>>
 
-    @Query("UPDATE habits SET currentStreak = currentStreak + 1, longestStreak = MAX(longestStreak, currentStreak + 1) WHERE id = :habitId")
-    suspend fun incrementStreak(habitId: String)
+    @Query("SELECT * FROM habits WHERE id = :habitId")
+    suspend fun getHabitById(habitId: String): HabitEntity?
 
     @Query("UPDATE habits SET currentStreak = 0 WHERE id = :habitId")
     suspend fun resetStreak(habitId: String)

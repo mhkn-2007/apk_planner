@@ -187,7 +187,40 @@ class TodayViewModel @Inject constructor(
 
     fun toggleTaskComplete(task: TaskEntity) {
         viewModelScope.launch {
-            taskRepository.updateTask(task.copy(isCompleted = !task.isCompleted))
+            val newCompletedState = !task.isCompleted
+            taskRepository.updateTask(task.copy(isCompleted = newCompletedState))
+
+            val habitId = task.habitId
+            if (habitId != null) {
+                val habit = habitDao.getHabitById(habitId) ?: return@launch
+                val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date())
+
+                if (newCompletedState) {
+                    // Only count once per day, mirroring the manual habit
+                    // check-in logic in HabitsScreen.
+                    if (habit.lastCompletedDate != todayStr) {
+                        val newStreak = habit.currentStreak + 1
+                        habitDao.updateHabit(
+                            habit.copy(
+                                currentStreak = newStreak,
+                                longestStreak = maxOf(habit.longestStreak, newStreak),
+                                lastCompletedDate = todayStr
+                            )
+                        )
+                    }
+                } else {
+                    // Un-completing the task should undo today's check-in.
+                    if (habit.lastCompletedDate == todayStr) {
+                        habitDao.updateHabit(
+                            habit.copy(
+                                currentStreak = maxOf(0, habit.currentStreak - 1),
+                                lastCompletedDate = null
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 

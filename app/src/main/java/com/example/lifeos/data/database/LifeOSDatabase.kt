@@ -26,7 +26,7 @@ import com.example.lifeos.data.database.entities.TaskEntity
         RoutineTemplateEntity::class,
         RoutineInstanceEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {

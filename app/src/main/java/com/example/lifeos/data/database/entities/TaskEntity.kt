@@ -18,6 +18,7 @@ data class TaskEntity(
     val categoryId: String? = null,
     val goalId: String? = null,
     val projectId: String? = null,
+    val habitId: String? = null, // links this task to a habit, if it was created from one
     val isCompleted: Boolean = false,
     val timeOfDay: String? = null, // MORNING, AFTERNOON, NIGHT, CUSTOM
     val alarmTimeMillis: Long? = null, // specific scheduled alarm time
