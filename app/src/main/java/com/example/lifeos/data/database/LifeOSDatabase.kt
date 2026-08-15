@@ -14,7 +14,9 @@ import com.example.lifeos.data.database.entities.HabitEntity
 import com.example.lifeos.data.database.entities.ProjectEntity
 import com.example.lifeos.data.database.entities.ReminderEntity
 import com.example.lifeos.data.database.entities.RoutineInstanceEntity
+import com.example.lifeos.data.database.entities.RoutineInstanceTaskEntity
 import com.example.lifeos.data.database.entities.RoutineTemplateEntity
+import com.example.lifeos.data.database.entities.RoutineTemplateTaskEntity
 import com.example.lifeos.data.database.entities.SubtaskEntity
 import com.example.lifeos.data.database.entities.TaskEntity
 
@@ -27,9 +29,11 @@ import com.example.lifeos.data.database.entities.TaskEntity
         ProjectEntity::class,
         HabitEntity::class,
         RoutineTemplateEntity::class,
-        RoutineInstanceEntity::class
+        RoutineTemplateTaskEntity::class,
+        RoutineInstanceEntity::class,
+        RoutineInstanceTaskEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {
