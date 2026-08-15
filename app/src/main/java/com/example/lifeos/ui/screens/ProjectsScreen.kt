@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -89,8 +88,12 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     var showAddProjectDialog by remember { mutableStateOf(false) }
 
     // Dynamic gradient background depending on Light/Dark mode (previously
-    // hardcoded to always show the dark gradient regardless of theme setting).
-    val isLight = MaterialTheme.colorScheme.background == Color(0xFFF5F7FA)
+    // hardcoded to always show the dark gradient regardless of theme setting,
+    // and even after that fix, relying on a fragile exact-color comparison
+    // against the light background constant). We now read the same
+    // isDarkMode flag the rest of the app uses via LifeOSTheme, so this stays
+    // correct even if the light/dark palette constants change later.
+    val isLight = !LocalIsDarkTheme.current
     val bgGradient = if (isLight) {
         Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
     } else {
@@ -185,14 +188,14 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
             SmallFloatingActionButton(
                 onClick = { showAddGoalDialog = true },
                 containerColor = AccentAmber,
-                contentColor = Color.Black
+                contentColor = MaterialTheme.colorScheme.onTertiary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "هدف جدید")
             }
             FloatingActionButton(
                 onClick = { showAddProjectDialog = true },
                 containerColor = AccentBlue,
-                contentColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.Add, contentDescription = "پروژه جدید")

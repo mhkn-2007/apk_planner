@@ -6,12 +6,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.view.WindowCompat
+
+/**
+ * Exposes whether the app is currently rendering in dark mode, backed by the
+ * same [darkTheme] flag passed into [LifeOSTheme]. Screens should read this
+ * instead of comparing colorScheme values against known constants, since
+ * that approach silently breaks whenever the palette is tweaked.
+ */
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
 
 private val DarkGlassmorphismColorScheme = darkColorScheme(
     primary = AccentBlue,
@@ -73,7 +82,10 @@ fun LifeOSTheme(
     }
 
     // Force RTL for Persian
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Rtl,
+        LocalIsDarkTheme provides darkTheme
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

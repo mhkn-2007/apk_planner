@@ -92,7 +92,7 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
     var showAddDialog by remember { mutableStateOf(false) }
 
     // Dynamic gradient backgrounds depending on Light/Dark mode
-    val isLight = MaterialTheme.colorScheme.background == Color(0xFFF5F7FA)
+    val isLight = !LocalIsDarkTheme.current
     val bgGradient = if (isLight) {
         Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
     } else {

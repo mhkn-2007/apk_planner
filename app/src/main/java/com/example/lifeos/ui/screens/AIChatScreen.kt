@@ -116,14 +116,21 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
     val isTyping by viewModel.isTyping.collectAsState()
     var inputText by remember { mutableStateOf("") }
 
+    // Background and text colors were previously hardcoded to the dark
+    // palette regardless of the user's theme setting. Now derived from the
+    // same dark/light flag the rest of the app uses, matching the fix
+    // already applied to ProjectsScreen.
+    val isDark = LocalIsDarkTheme.current
+    val bgGradient = if (isDark) {
+        Brush.verticalGradient(colors = listOf(GradientStart, GradientMiddle, GradientEnd))
+    } else {
+        Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(GradientStart, GradientMiddle, GradientEnd)
-                )
-            )
+            .background(bgGradient)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
@@ -132,13 +139,13 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
                     Text(
                         text = "دستیار هوشمند",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = TextPrimary,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "من آماده کمک به شما هستم",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
             }
@@ -182,14 +189,19 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("پیام خود را بنویسید...", color = TextMuted) },
+                        placeholder = {
+                            Text(
+                                "پیام خود را بنویسید...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent,
                             unfocusedBorderColor = Color.Transparent,
-                            focusedContainerColor = Color.Black.copy(alpha = 0.35f),
-                            unfocusedContainerColor = Color.Black.copy(alpha = 0.2f),
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
+                            focusedContainerColor = MaterialTheme.colorScheme.scrim.copy(alpha = if (isDark) 0.35f else 0.06f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.scrim.copy(alpha = if (isDark) 0.2f else 0.03f),
+                            focusedTextColor = MaterialTheme.colorScheme.onBackground,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onBackground,
                             cursorColor = AccentBlue
                         ),
                         shape = RoundedCornerShape(24.dp)
@@ -216,6 +228,8 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
 @Composable
 fun GlassChatBubble(message: ChatMessage) {
     val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
+    val isDark = LocalIsDarkTheme.current
+    val bubbleSurfaceColor = if (isDark) Color.White else Color.Black
 
     Box(
         modifier = Modifier.fillMaxWidth(),
@@ -229,13 +243,18 @@ fun GlassChatBubble(message: ChatMessage) {
                     if (message.isUser)
                         Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.3f), AccentBlue.copy(alpha = 0.15f)))
                     else
-                        Brush.linearGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.06f)))
+                        Brush.linearGradient(
+                            listOf(
+                                bubbleSurfaceColor.copy(alpha = if (isDark) 0.12f else 0.06f),
+                                bubbleSurfaceColor.copy(alpha = if (isDark) 0.06f else 0.03f)
+                            )
+                        )
                 )
                 .padding(12.dp)
         ) {
             Text(
                 text = message.text,
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.bodyLarge
             )
         }

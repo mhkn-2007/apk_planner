@@ -216,7 +216,7 @@ fun TodayScreen(
     val todayJalali = remember { JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis()) }
 
     // Dynamic gradient backgrounds depending on Light/Dark mode
-    val isLight = MaterialTheme.colorScheme.background == Color(0xFFF5F7FA)
+    val isLight = !LocalIsDarkTheme.current
     val bgGradient = if (isLight) {
         Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
     } else {

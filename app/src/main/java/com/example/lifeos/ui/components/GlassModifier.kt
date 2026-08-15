@@ -3,7 +3,6 @@ package com.example.lifeos.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -11,6 +10,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.lifeos.ui.theme.LocalIsDarkTheme
 
 /**
  * Adaptive Glassmorphism modifier that adjusts contrast based on Light/Dark Mode.
@@ -18,8 +18,10 @@ import androidx.compose.ui.unit.dp
 fun Modifier.glassCard(
     cornerRadius: Dp = 20.dp
 ): Modifier = this.composed {
-    // Detect light vs dark by observing background color
-    val isDark = MaterialTheme.colorScheme.background != Color(0xFFF5F7FA)
+    // Read the same dark/light flag threaded through LifeOSTheme instead of
+    // comparing the resolved background color against a hardcoded constant
+    // (that comparison broke silently whenever the palette changed).
+    val isDark = LocalIsDarkTheme.current
     
     val glassColor = if (isDark) {
         Color.White.copy(alpha = 0.12f)
@@ -51,7 +53,7 @@ fun Modifier.glassCard(
 fun Modifier.glassSurface(
     cornerRadius: Dp = 24.dp
 ): Modifier = this.composed {
-    val isDark = MaterialTheme.colorScheme.background != Color(0xFFF5F7FA)
+    val isDark = LocalIsDarkTheme.current
     
     val glassColor = if (isDark) {
         Color.White.copy(alpha = 0.08f)
