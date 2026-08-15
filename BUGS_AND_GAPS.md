@@ -61,11 +61,11 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 - هیچ DAO‌ای براشون نیست.
 - هیچ صفحه‌ای برای مدیریت روتین‌ها وجود نداره.
 - جدول `RoutineTemplateTask` و `RoutineInstanceTask` که پرامپت خواسته (بخش ۴۳) اصلاً وجود نداره.
-**وضعیت: فاز بعدی.**
+**وضعیت: فیکس شد — `RoutineDao` اضافه شد، جدول‌های `RoutineTemplateTask`/`RoutineInstanceTask` ساخته شدن، `RoutinesScreen` با ViewModel کامل (Template/Instance) پیاده و به ناوبری وصل شد.**
 
 ### 🔴 ۲.۳ — بخش ۹-۱۰ (Subtasks و Multiple Reminders): DAO ندارن
 `SubtaskEntity` و `ReminderEntity` در دیتابیس هستن ولی هیچ DAO و UI‌ای براشون نیست. یعنی تسک‌ها نمی‌تونن subtask داشته باشن و سیستم چند-یادآوریِ الزامی بخش ۱۰ اصلاً وجود نداره (فقط یک `alarmTimeMillis` تکی روی هر تسک هست).
-**وضعیت: فاز بعدی.**
+**وضعیت: فیکس شد — `SubtaskDao` و `ReminderDao` اضافه شدن، `TaskRepository` باهاشون ادغام شد، و مدیریت subtask/چند-یادآوری (هرکدوم با alarm جدا از طریق `AlarmScheduler`) توی دیالوگ ادیت تسک اضافه شد.**
 
 ### 🔴 ۲.۴ — بخش ۱۸ (Focus Mode): اصلاً وجود نداره
 هیچ Pomodoro، هیچ `FocusSession` entity، هیچ صفحه‌ای.
@@ -78,11 +78,11 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 ### 🟠 ۲.۶ — بخش ۱۵-۱۶ (Goals/Projects): ناقصه
 - هیچ Milestone (`GoalMilestone`, `ProjectMilestone`) پیاده نشده.
 - ارتباط Task↔Goal و Task↔Project در Entity هست ولی هیچ UI‌ای برای وصل کردنشون وجود نداره.
-**وضعیت: فاز بعدی.**
+**وضعیت: فیکس شد — `GoalMilestoneEntity`/`ProjectMilestoneEntity` + `MilestoneDao` اضافه شدن، `ProjectsScreen` مایلستون‌های هرکدوم رو با UI کامل (افزودن/تیک زدن/حذف) نشون می‌ده، و دیالوگ ادیت تسک الان چیپ برای وصل‌کردن تسک به هدف/پروژه داره.**
 
 ### 🟡 ۲.۷ — بخش ۱۱ (Recurring Tasks): وجود نداره
 هیچ منطق تکرار (daily/weekly/monthly/custom) پیاده نشده.
-**وضعیت: فاز بعدی.**
+**وضعیت: فیکس شد — `recurrenceRule`/`recurrenceGroupId` روی `TaskEntity`، `GenerateRecurringTaskOccurrencesUseCase` برای تولید idempotent instance‌ها (بدون تکرار غیرکنترل‌شده)، و UI انتخاب تکرار توی دیالوگ افزودن تسک.**
 
 ### 🟡 ۲.۸ — بخش ۵ (ناوبری اصلی): فقط ۵ از ۱۱ بخش خواسته‌شده وجود داره
 موجود: Today, Calendar, Habits, AI Chat, Settings
@@ -93,16 +93,24 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 `DeterministicPlannerEngine` منطق خوبی داره (sort، workload، conflict detection) ولی:
 - هیچ‌جا در UI صدا زده نمی‌شه.
 - Time-blocking (بخش ۱۴) و تشخیص تداخل تقویم واقعی روش پیاده نشده.
-**وضعیت: بخشی فیکس شد (به `TodayScreen` وصل شد برای نمایش هشدار workload)؛ ادغام کامل با UI زمان‌بندی فاز بعدیه.**
+**وضعیت: فیکس شد — به `TodayScreen` وصل شد و هشدار workload/تداخل نمایش داده می‌شه. ادغام کامل با یک UI اختصاصی time-blocking (بخش ۱۴) همچنان فاز بعدیه.**
 
 ### 🟡 ۲.۱۰ — بخش ۴۴ (Data Model): خیلی از Entity‌ها وجود ندارن
-جا افتاده: `User`, `Category`, `Tag`, `RoutineTemplateTask`, `RoutineInstanceTask`, `GoalMilestone`, `ProjectMilestone`, `HabitLog`, `CalendarEvent`, `FocusSession`, `AIConversation`, `AIMessage`, `AIAction`, `UserPreference` (جدا از DataStore فعلی), `AnalyticsEvent`.
-**وضعیت: فاز بعدی.**
+جا افتاده بود: `User`, `Category`, `Tag`, `RoutineTemplateTask`, `RoutineInstanceTask`, `GoalMilestone`, `ProjectMilestone`, `HabitLog`, `CalendarEvent`, `FocusSession`, `AIConversation`, `AIMessage`, `AIAction`, `UserPreference` (جدا از DataStore فعلی), `AnalyticsEvent`.
+**وضعیت: بخشی فیکس شد.**
+- `RoutineTemplateTask`, `RoutineInstanceTask`, `GoalMilestone`, `ProjectMilestone` قبلاً در فاز‌های Routines/Milestones اضافه شده بودن.
+- `HabitLogEntity` + `HabitLogDao` این نوبت اضافه شد (تاریخچه‌ی روزانه‌ی تکمیل هر عادت، هم از چک‌این دستی در `HabitsScreen` و هم از تکمیل تسک‌های وصل‌شده به عادت در `TodayScreen`) — پایه‌ی داده‌ای لازم برای آمار هفتگی/ماهانه‌ی بخش ۱۷.
+- `UserPreference` عمداً به‌صورت Entity جدا اضافه نشد چون همین الان با `PreferencesManager`/DataStore پیاده‌سازی شده (معماری درست‌تر از یک جدول Room برای key-value ساده).
+- `CalendarEvent`, `FocusSession`, `AIConversation`, `AIMessage`, `AIAction`, `AnalyticsEvent` هنوز جا افتاده‌ن چون به فیچرهای پیاده‌نشده‌ی خودشون وابسته‌ن (Focus Mode = فاز ۵، Analytics = فاز ۶، AI Tool Layer = فاز ۴)؛ ساختن Entity بدون اون فیچرها طبق اصل «no fake functionality» بی‌فایده‌ست.
+- `Category`/`Tag` عمداً اضافه نشدن: در هیچ صفحه‌ای استفاده نمی‌شن، پس یک Entity/DAO بی‌UI فقط کد مرده‌ی جدید می‌سازه؛ باید همراه با UI فیلتر/دسته‌بندی تسک به‌عنوان یک فیچر مجزا کار بشه.
+- `User` نیازمند تصمیم معماری احراز هویت (local-only vs backend) هست، در بخش ۵۱ پرامپت هم به‌عنوان «authentication-ready» (نه لزوماً پیاده‌شده) خواسته شده؛ فاز بعدی.
 
 ### ⚪️ ۲.۱۱ — کد مرده (نوشته شده ولی وصل نیست)
-- `ReminderWorker` (WorkManager) — هیچ‌جا enqueue نمی‌شه؛ اپ در عمل فقط `AlarmManager` رو مستقیم استفاده می‌کنه.
-- `DeterministicPlannerEngine` — تا قبل از این فیکس‌ها هیچ‌جا صدا زده نمی‌شد.
-**وضعیت: `DeterministicPlannerEngine` وصل شد؛ `ReminderWorker` چون Alarm-based reminder جایگزینش شده، حذف یا برای فاز بعدی (batch reminders چندتایی) نگه داشته می‌شه.**
+- `ReminderWorker` (WorkManager) — هیچ‌جا enqueue نمی‌شد؛ اپ در عمل فقط `AlarmManager` رو مستقیم استفاده می‌کرد.
+- `DeterministicPlannerEngine` — تا قبل از فیکس ۲.۹ هیچ‌جا صدا زده نمی‌شد.
+**وضعیت: فیکس شد.**
+- `DeterministicPlannerEngine` به `TodayScreen` وصل شد (بخش ۲.۹).
+- `ReminderWorker` کامل حذف شد چون Alarm-based reminders (`AlarmScheduler`) کاملاً جایگزینش شده و دیگه هیچ نقشی نداشت؛ وابستگی‌های بی‌استفاده‌ی `androidx.work:work-runtime-ktx` و `androidx.hilt:hilt-work` هم از `build.gradle.kts` حذف شدن.
 
 ### 🟡 ۲.۱۲ — بخش ۴ (زبان): min SDK اشتباه بود
 پرامپت `minSdk = 30` (Android 11) خواسته؛ کد `minSdk = 30` داشت — این درست بود، مغایرتی نیست. ✅ تاییدشده صحیح.
@@ -115,14 +123,15 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 
 ## خلاصه‌ی اولویت‌بندی کار باقی‌مانده
 
-1. ✅ فاز ۱ (این نوبت): فیکس باگ‌های بحرانی فنی که اپ فعلی رو می‌شکنه — **انجام شد**
-2. فاز ۲: DAO های گمشده (Subtask, Reminder, Routine) + اتصال به UI
-3. فاز ۳: پیاده‌سازی Routines (Template/Instance) با UI کامل
-4. فاز ۴: پیاده‌سازی AI Tool Layer واقعی + Read/Action Tools + اتصال به یک Provider واقعی (نیازمند تصمیم درباره‌ی نحوه‌ی مدیریت کلید API طبق بخش ۳۷-۳۹ پرامپت)
-5. فاز ۵: Focus Mode
-6. فاز ۶: Analytics
-7. فاز ۷: Goals/Projects Milestones + اتصال کامل زنجیره‌ی Goal→Project→Task
-8. فاز ۸: Recurring Tasks
-9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت
+1. ✅ فاز ۱: فیکس باگ‌های بحرانی فنی که اپ فعلی رو می‌شکنه — **انجام شد**
+2. ✅ فاز ۲: DAO های گمشده (Subtask, Reminder, Routine) + اتصال به UI — **انجام شد**
+3. ✅ فاز ۳: پیاده‌سازی Routines (Template/Instance) با UI کامل — **انجام شد**
+4. فاز ۴: پیاده‌سازی AI Tool Layer واقعی + Read/Action Tools + اتصال به یک Provider واقعی (نیازمند تصمیم درباره‌ی نحوه‌ی مدیریت کلید API طبق بخش ۳۷-۳۹ پرامپت) — **هنوز مونده**
+5. فاز ۵: Focus Mode — **هنوز مونده**
+6. فاز ۶: Analytics — **هنوز مونده (پایه‌ی `HabitLog` برای آمار عادت‌ها آماده شد)**
+7. ✅ فاز ۷: Goals/Projects Milestones + اتصال کامل زنجیره‌ی Goal→Project→Task — **انجام شد**
+8. ✅ فاز ۸: Recurring Tasks — **انجام شد**
+9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks/Goals/Focus/Analytics هنوز صفحه‌ی مستقل تو bottom nav ندارن) — **هنوز مونده**
+10. ✅ تکمیل جزئی ۲.۱۰ (Data model — `HabitLog`) و ۲.۱۱ (حذف کد مرده‌ی `ReminderWorker`) — **انجام شد**
 
-هر فاز به‌خاطر حجمش باید در یک نوبت کاری جداگانه انجام بشه.
+بزرگترین کار باقی‌مانده فاز ۴ (سیستم AI واقعی، بخش‌های ۲۰ تا ۴۱ پرامپت) هست؛ حجمش با همه‌ی فازهای قبلی روی هم برابری می‌کنه و باید در چند نوبت کاری جدا انجام بشه.

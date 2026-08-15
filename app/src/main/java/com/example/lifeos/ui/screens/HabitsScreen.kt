@@ -20,7 +20,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lifeos.data.database.dao.HabitDao
+import com.example.lifeos.data.database.dao.HabitLogDao
 import com.example.lifeos.data.database.entities.HabitEntity
+import com.example.lifeos.data.database.entities.HabitLogEntity
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 import com.example.lifeos.util.JalaliCalendarUtil
@@ -34,7 +36,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HabitsViewModel @Inject constructor(
-    private val habitDao: HabitDao
+    private val habitDao: HabitDao,
+    private val habitLogDao: HabitLogDao
 ) : ViewModel() {
 
     private val _habits = MutableStateFlow<List<HabitEntity>>(emptyList())
@@ -66,14 +69,17 @@ class HabitsViewModel @Inject constructor(
         
         viewModelScope.launch {
             if (habit.lastCompletedDate == todayStr) {
-                // Toggle OFF: Decrement streak, clear date
+                // Toggle OFF: Decrement streak, clear date, remove today's log
                 val updated = habit.copy(
                     currentStreak = maxOf(0, habit.currentStreak - 1),
                     lastCompletedDate = null
                 )
                 habitDao.updateHabit(updated)
+                habitLogDao.deleteLogForDate(habit.id, todayStr)
             } else {
-                // Toggle ON: Increment streak, update date
+                // Toggle ON: Increment streak, update date, record today's log.
+                // The log is what powers weekly/monthly consistency stats
+                // (prompt section 17) independently of the running streak.
                 val newStreak = habit.currentStreak + 1
                 val updated = habit.copy(
                     currentStreak = newStreak,
@@ -81,9 +87,13 @@ class HabitsViewModel @Inject constructor(
                     lastCompletedDate = todayStr
                 )
                 habitDao.updateHabit(updated)
+                habitLogDao.insertLog(HabitLogEntity(habitId = habit.id, dateKey = todayStr))
             }
         }
     }
+
+    /** Backing data for weekly/monthly consistency views (prompt section 17). */
+    fun getLogsForHabit(habitId: String) = habitLogDao.getLogsForHabit(habitId)
 }
 
 @Composable

@@ -6,6 +6,7 @@ import com.example.lifeos.data.database.LifeOSDatabase
 import com.example.lifeos.data.database.TaskRepositoryImpl
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
+import com.example.lifeos.data.database.dao.HabitLogDao
 import com.example.lifeos.data.database.dao.MilestoneDao
 import com.example.lifeos.data.database.dao.ProjectDao
 import com.example.lifeos.data.database.dao.ReminderDao
@@ -52,6 +53,11 @@ object DatabaseModule {
     @Provides
     fun provideHabitDao(database: LifeOSDatabase): HabitDao {
         return database.habitDao()
+    }
+
+    @Provides
+    fun provideHabitLogDao(database: LifeOSDatabase): HabitLogDao {
+        return database.habitLogDao()
     }
 
     @Provides

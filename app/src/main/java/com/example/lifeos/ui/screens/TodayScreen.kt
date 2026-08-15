@@ -84,6 +84,7 @@ class TodayViewModel @Inject constructor(
     private val getTodayTasksUseCase: GetTodayTasksUseCase,
     private val taskRepository: TaskRepository,
     private val habitDao: HabitDao,
+    private val habitLogDao: com.example.lifeos.data.database.dao.HabitLogDao,
     private val alarmScheduler: AlarmScheduler,
     private val plannerEngine: DeterministicPlannerEngine,
     private val generateRecurringOccurrences: GenerateRecurringTaskOccurrencesUseCase,
@@ -310,6 +311,16 @@ class TodayViewModel @Inject constructor(
                                 lastCompletedDate = todayStr
                             )
                         )
+                        // Keep the per-day history (used for weekly/monthly
+                        // stats, prompt section 17) in sync with completions
+                        // that come from a habit-linked task, not just the
+                        // manual check-in on the Habits screen.
+                        habitLogDao.insertLog(
+                            com.example.lifeos.data.database.entities.HabitLogEntity(
+                                habitId = habitId,
+                                dateKey = todayStr
+                            )
+                        )
                     }
                 } else {
                     // Un-completing the task should undo today's check-in.
@@ -320,6 +331,7 @@ class TodayViewModel @Inject constructor(
                                 lastCompletedDate = null
                             )
                         )
+                        habitLogDao.deleteLogForDate(habitId, todayStr)
                     }
                 }
             }
