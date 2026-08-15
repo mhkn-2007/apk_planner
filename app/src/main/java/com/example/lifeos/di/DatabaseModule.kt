@@ -7,6 +7,9 @@ import com.example.lifeos.data.database.TaskRepositoryImpl
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
 import com.example.lifeos.data.database.dao.ProjectDao
+import com.example.lifeos.data.database.dao.ReminderDao
+import com.example.lifeos.data.database.dao.RoutineDao
+import com.example.lifeos.data.database.dao.SubtaskDao
 import com.example.lifeos.data.database.dao.TaskDao
 import com.example.lifeos.domain.repositories.TaskRepository
 import dagger.Module
@@ -48,6 +51,21 @@ object DatabaseModule {
     @Provides
     fun provideHabitDao(database: LifeOSDatabase): HabitDao {
         return database.habitDao()
+    }
+
+    @Provides
+    fun provideSubtaskDao(database: LifeOSDatabase): SubtaskDao {
+        return database.subtaskDao()
+    }
+
+    @Provides
+    fun provideReminderDao(database: LifeOSDatabase): ReminderDao {
+        return database.reminderDao()
+    }
+
+    @Provides
+    fun provideRoutineDao(database: LifeOSDatabase): RoutineDao {
+        return database.routineDao()
     }
 
     @Provides
