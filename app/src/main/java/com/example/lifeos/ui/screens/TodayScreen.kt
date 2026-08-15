@@ -35,7 +35,9 @@ import com.example.lifeos.data.database.entities.HabitEntity
 import com.example.lifeos.data.database.entities.TaskEntity
 import com.example.lifeos.domain.planner.DeterministicPlannerEngine
 import com.example.lifeos.domain.repositories.TaskRepository
+import com.example.lifeos.domain.usecases.GenerateRecurringTaskOccurrencesUseCase
 import com.example.lifeos.domain.usecases.GetTodayTasksUseCase
+import com.example.lifeos.domain.usecases.RecurrenceRule
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 import com.example.lifeos.util.AlarmScheduler
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -79,6 +82,7 @@ class TodayViewModel @Inject constructor(
     private val habitDao: HabitDao,
     private val alarmScheduler: AlarmScheduler,
     private val plannerEngine: DeterministicPlannerEngine,
+    private val generateRecurringOccurrences: GenerateRecurringTaskOccurrencesUseCase,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -102,6 +106,7 @@ class TodayViewModel @Inject constructor(
                 recomputePlanningInsight(list)
             }
         }
+        refreshAllRecurringSeries()
     }
 
     private fun recomputePlanningInsight(tasks: List<TaskEntity>) {
@@ -116,7 +121,15 @@ class TodayViewModel @Inject constructor(
         )
     }
 
-    fun addTask(title: String, description: String, priority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null) {
+    fun addTask(
+        title: String,
+        description: String,
+        priority: Int,
+        timeOfDay: String? = null,
+        customHour: Int? = null,
+        customMinute: Int? = null,
+        recurrenceRule: RecurrenceRule? = null
+    ) {
         if (title.isBlank()) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -156,6 +169,7 @@ class TodayViewModel @Inject constructor(
                 }
             }
 
+            val recurrenceGroupId = if (recurrenceRule != null) UUID.randomUUID().toString() else null
             val task = TaskEntity(
                 id = UUID.randomUUID().toString(),
                 title = title,
@@ -163,13 +177,39 @@ class TodayViewModel @Inject constructor(
                 priority = priority,
                 dueDateMillis = System.currentTimeMillis(),
                 timeOfDay = timeOfDay,
-                alarmTimeMillis = alarmTime
+                alarmTimeMillis = alarmTime,
+                recurrenceRule = recurrenceRule?.encode(),
+                recurrenceGroupId = recurrenceGroupId
             )
             taskRepository.insertTask(task)
 
             alarmTime?.let {
                 alarmScheduler.scheduleAlarm(context, task.id, task.title, it)
             }
+
+            // Materialize the rest of this series' occurrences right away so
+            // Today/Calendar show them without waiting for a background pass.
+            if (recurrenceRule != null) {
+                generateRecurringOccurrences(task)
+            }
+        }
+    }
+
+    /**
+     * Regenerates upcoming occurrences for every existing recurring series.
+     * Safe to call on every app start: occurrence generation is idempotent
+     * (see [GenerateRecurringTaskOccurrencesUseCase]), so this only fills in
+     * newly-entered days of the rolling window rather than duplicating rows.
+     */
+    private fun refreshAllRecurringSeries() {
+        viewModelScope.launch {
+            val recurringSources = taskRepository.getAllTasks().first()
+            recurringSources
+                .filter { it.recurrenceRule != null && it.recurrenceGroupId != null }
+                .groupBy { it.recurrenceGroupId }
+                .values
+                .mapNotNull { group -> group.minByOrNull { it.dueDateMillis ?: Long.MAX_VALUE } }
+                .forEach { earliestInGroup -> generateRecurringOccurrences(earliestInGroup) }
         }
     }
 
@@ -502,8 +542,8 @@ fun TodayScreen(
         if (showAddDialog) {
             AddTaskDialog(
                 onDismiss = { showAddDialog = false },
-                onAdd = { title, desc, priority, timeOfDay, hour, min ->
-                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min)
+                onAdd = { title, desc, priority, timeOfDay, hour, min, recurrenceRule ->
+                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min, recurrenceRule)
                     showAddDialog = false
                 }
             )
@@ -718,7 +758,7 @@ fun ConfigureHabitDialog(
 @Composable
 fun AddTaskDialog(
     onDismiss: () -> Unit,
-    onAdd: (String, String, Int, String?, Int?, Int?) -> Unit
+    onAdd: (String, String, Int, String?, Int?, Int?, RecurrenceRule?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -726,6 +766,8 @@ fun AddTaskDialog(
     var timeOfDay by remember { mutableStateOf<String?>(null) }
     var customHour by remember { mutableStateOf<Int?>(null) }
     var customMinute by remember { mutableStateOf<Int?>(null) }
+    var recurrenceOption by remember { mutableStateOf("NONE") } // NONE, DAILY, WEEKLY, MONTHLY
+    val selectedWeekdays = remember { mutableStateListOf<Int>() }
     val context = LocalContext.current
 
     AlertDialog(
@@ -796,11 +838,49 @@ fun AddTaskDialog(
                     }
                     Text(timeText, color = AccentBlue)
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("تکرار:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val options = listOf("بدون تکرار" to "NONE", "روزانه" to "DAILY", "هفتگی" to "WEEKLY", "ماهانه" to "MONTHLY")
+                    options.forEach { (label, value) ->
+                        FilterChip(
+                            selected = recurrenceOption == value,
+                            onClick = { recurrenceOption = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                if (recurrenceOption == "WEEKLY") {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("روزهای هفته:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // Calendar.SUNDAY=1 .. Calendar.SATURDAY=7
+                        val weekdayLabels = listOf("ش" to 7, "ی" to 1, "د" to 2, "س" to 3, "چ" to 4, "پ" to 5, "ج" to 6)
+                        weekdayLabels.forEach { (label, calDay) ->
+                            FilterChip(
+                                selected = calDay in selectedWeekdays,
+                                onClick = {
+                                    if (calDay in selectedWeekdays) selectedWeekdays.remove(calDay) else selectedWeekdays.add(calDay)
+                                },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onAdd(title, description, priority, timeOfDay, customHour, customMinute) },
+                onClick = {
+                    val rule = when (recurrenceOption) {
+                        "DAILY" -> RecurrenceRule.Daily
+                        "WEEKLY" -> if (selectedWeekdays.isNotEmpty()) RecurrenceRule.Weekly(selectedWeekdays.toSet()) else null
+                        "MONTHLY" -> RecurrenceRule.Monthly
+                        else -> null
+                    }
+                    onAdd(title, description, priority, timeOfDay, customHour, customMinute, rule)
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
                 Text("ذخیره")

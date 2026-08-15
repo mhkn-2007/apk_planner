@@ -19,6 +19,10 @@ class TaskRepositoryImpl @Inject constructor(
         taskDao.insertTask(task)
     }
 
+    override suspend fun insertTasks(tasks: List<TaskEntity>) {
+        taskDao.insertTasks(tasks)
+    }
+
     override suspend fun updateTask(task: TaskEntity) {
         taskDao.updateTask(task)
     }
@@ -37,6 +41,18 @@ class TaskRepositoryImpl @Inject constructor(
 
     override fun getTasksForDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TaskEntity>> {
         return taskDao.getTasksForDateRange(startOfDay, endOfDay)
+    }
+
+    override suspend fun getExistingOccurrenceDates(groupId: String, startOfDay: Long, endOfDay: Long): List<Long?> {
+        return taskDao.getExistingOccurrenceDates(groupId, startOfDay, endOfDay)
+    }
+
+    override fun getTasksForRecurrenceGroup(groupId: String): Flow<List<TaskEntity>> {
+        return taskDao.getTasksForRecurrenceGroup(groupId)
+    }
+
+    override suspend fun deleteFutureUncompletedOccurrences(groupId: String, fromMillis: Long) {
+        taskDao.deleteFutureUncompletedOccurrences(groupId, fromMillis)
     }
 
     override fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>> {

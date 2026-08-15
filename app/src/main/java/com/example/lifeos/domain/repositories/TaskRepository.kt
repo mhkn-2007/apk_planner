@@ -7,11 +7,17 @@ import kotlinx.coroutines.flow.Flow
 
 interface TaskRepository {
     suspend fun insertTask(task: TaskEntity)
+    suspend fun insertTasks(tasks: List<TaskEntity>)
     suspend fun updateTask(task: TaskEntity)
     suspend fun deleteTask(task: TaskEntity)
     suspend fun getTaskById(taskId: String): TaskEntity?
     fun getAllTasks(): Flow<List<TaskEntity>>
     fun getTasksForDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TaskEntity>>
+
+    // Recurrence (prompt section 11)
+    suspend fun getExistingOccurrenceDates(groupId: String, startOfDay: Long, endOfDay: Long): List<Long?>
+    fun getTasksForRecurrenceGroup(groupId: String): Flow<List<TaskEntity>>
+    suspend fun deleteFutureUncompletedOccurrences(groupId: String, fromMillis: Long)
 
     // Subtasks
     fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>>

@@ -15,6 +15,9 @@ interface TaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: TaskEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTasks(tasks: List<TaskEntity>)
+
     @Update
     suspend fun updateTask(task: TaskEntity)
 
@@ -32,4 +35,18 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND dueDateMillis < :currentTimeMillis")
     suspend fun getOverdueTasks(currentTimeMillis: Long): List<TaskEntity>
+
+    /**
+     * Existing occurrences already generated for a recurring series
+     * (identified by [TaskEntity.recurrenceGroupId]) within a date range.
+     * Used to avoid regenerating/duplicating occurrences that already exist.
+     */
+    @Query("SELECT dueDateMillis FROM tasks WHERE recurrenceGroupId = :groupId AND dueDateMillis >= :startOfDay AND dueDateMillis <= :endOfDay")
+    suspend fun getExistingOccurrenceDates(groupId: String, startOfDay: Long, endOfDay: Long): List<Long?>
+
+    @Query("SELECT * FROM tasks WHERE recurrenceGroupId = :groupId ORDER BY dueDateMillis ASC")
+    fun getTasksForRecurrenceGroup(groupId: String): Flow<List<TaskEntity>>
+
+    @Query("DELETE FROM tasks WHERE recurrenceGroupId = :groupId AND isCompleted = 0 AND dueDateMillis > :fromMillis")
+    suspend fun deleteFutureUncompletedOccurrences(groupId: String, fromMillis: Long)
 }

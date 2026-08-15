@@ -33,7 +33,7 @@ import com.example.lifeos.data.database.entities.TaskEntity
         RoutineInstanceEntity::class,
         RoutineInstanceTaskEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {
