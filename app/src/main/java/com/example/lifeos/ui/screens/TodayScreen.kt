@@ -7,8 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -230,6 +232,89 @@ class TodayViewModel @Inject constructor(
             alarmScheduler.cancelAlarm(context, task.id)
         }
     }
+
+    // --- Subtasks ---
+
+    fun getSubtasksForTask(taskId: String): StateFlow<List<com.example.lifeos.data.database.entities.SubtaskEntity>> {
+        return taskRepository.getSubtasksForTask(taskId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    fun addSubtask(taskId: String, title: String, position: Int) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            taskRepository.insertSubtask(
+                com.example.lifeos.data.database.entities.SubtaskEntity(
+                    taskId = taskId,
+                    title = title,
+                    position = position
+                )
+            )
+        }
+    }
+
+    fun toggleSubtaskComplete(subtask: com.example.lifeos.data.database.entities.SubtaskEntity) {
+        viewModelScope.launch {
+            taskRepository.updateSubtask(subtask.copy(isCompleted = !subtask.isCompleted))
+        }
+    }
+
+    fun deleteSubtask(subtask: com.example.lifeos.data.database.entities.SubtaskEntity) {
+        viewModelScope.launch {
+            taskRepository.deleteSubtask(subtask)
+        }
+    }
+
+    // --- Reminders ---
+
+    fun getRemindersForTask(taskId: String): StateFlow<List<com.example.lifeos.data.database.entities.ReminderEntity>> {
+        return taskRepository.getRemindersForTask(taskId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    fun addReminder(task: TaskEntity, triggerTimeMillis: Long, message: String?) {
+        viewModelScope.launch {
+            val reminder = com.example.lifeos.data.database.entities.ReminderEntity(
+                taskId = task.id,
+                triggerTimeMillis = triggerTimeMillis,
+                message = message
+            )
+            taskRepository.insertReminder(reminder)
+            alarmScheduler.scheduleReminderAlarm(
+                context = context,
+                reminderId = reminder.id,
+                taskId = task.id,
+                title = task.title,
+                message = message,
+                triggerAtMillis = triggerTimeMillis
+            )
+        }
+    }
+
+    fun setReminderEnabled(reminder: com.example.lifeos.data.database.entities.ReminderEntity, task: TaskEntity, enabled: Boolean) {
+        viewModelScope.launch {
+            taskRepository.updateReminder(reminder.copy(isEnabled = enabled))
+            if (enabled) {
+                alarmScheduler.scheduleReminderAlarm(
+                    context = context,
+                    reminderId = reminder.id,
+                    taskId = task.id,
+                    title = task.title,
+                    message = reminder.message,
+                    triggerAtMillis = reminder.triggerTimeMillis
+                )
+            } else {
+                alarmScheduler.cancelReminderAlarm(context, reminder.id)
+            }
+        }
+    }
+
+    fun deleteReminder(reminder: com.example.lifeos.data.database.entities.ReminderEntity) {
+        viewModelScope.launch {
+            taskRepository.deleteReminder(reminder)
+            alarmScheduler.cancelReminderAlarm(context, reminder.id)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -400,6 +485,7 @@ fun TodayScreen(
         if (selectedTaskForEdit != null) {
             EditTaskDialog(
                 task = selectedTaskForEdit!!,
+                viewModel = viewModel,
                 onDismiss = { selectedTaskForEdit = null },
                 onUpdate = { title, desc, priority, timeOfDay, hour, min ->
                     viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min)
@@ -646,6 +732,7 @@ fun AddTaskDialog(
 @Composable
 fun EditTaskDialog(
     task: TaskEntity,
+    viewModel: TodayViewModel,
     onDismiss: () -> Unit,
     onUpdate: (String, String, Int, String?, Int?, Int?) -> Unit
 ) {
@@ -653,7 +740,7 @@ fun EditTaskDialog(
     var description by remember { mutableStateOf(task.description ?: "") }
     var priority by remember { mutableIntStateOf(task.priority) }
     var timeOfDay by remember { mutableStateOf(task.timeOfDay) }
-    
+
     // Parse custom hour/min if available from existing alarmTimeMillis
     var customHour by remember {
         mutableStateOf(task.alarmTimeMillis?.let {
@@ -669,15 +756,23 @@ fun EditTaskDialog(
             cal.get(Calendar.MINUTE)
         })
     }
-    
+
     val context = LocalContext.current
+    val subtasks by viewModel.getSubtasksForTask(task.id).collectAsState()
+    val reminders by viewModel.getRemindersForTask(task.id).collectAsState()
+    var newSubtaskTitle by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("ویرایش کار", color = MaterialTheme.colorScheme.onBackground) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -739,6 +834,98 @@ fun EditTaskDialog(
                         "تغییر ساعت نوتیفیکیشن"
                     }
                     Text(timeText, color = AccentBlue)
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                // --- Subtasks section (prompt section 9) ---
+                Text("زیروظیفه‌ها:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                subtasks.forEach { subtask ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Checkbox(
+                            checked = subtask.isCompleted,
+                            onCheckedChange = { viewModel.toggleSubtaskComplete(subtask) }
+                        )
+                        Text(
+                            text = subtask.title,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textDecoration = if (subtask.isCompleted) TextDecoration.LineThrough else null
+                        )
+                        IconButton(onClick = { viewModel.deleteSubtask(subtask) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "حذف زیروظیفه", tint = AccentRed)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = newSubtaskTitle,
+                        onValueChange = { newSubtaskTitle = it },
+                        label = { Text("زیروظیفه جدید") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        if (newSubtaskTitle.isNotBlank()) {
+                            viewModel.addSubtask(task.id, newSubtaskTitle, subtasks.size)
+                            newSubtaskTitle = ""
+                        }
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "افزودن زیروظیفه", tint = AccentBlue)
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                // --- Reminders section (prompt section 10: multiple independent reminders) ---
+                Text("یادآوری‌ها:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                reminders.forEach { reminder ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val cal = Calendar.getInstance().apply { timeInMillis = reminder.triggerTimeMillis }
+                        val timeLabel = String.format(
+                            "%02d:%02d",
+                            cal.get(Calendar.HOUR_OF_DAY),
+                            cal.get(Calendar.MINUTE)
+                        )
+                        Text(
+                            text = reminder.message?.let { "$timeLabel — $it" } ?: timeLabel,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Switch(
+                            checked = reminder.isEnabled,
+                            onCheckedChange = { viewModel.setReminderEnabled(reminder, task, it) }
+                        )
+                        IconButton(onClick = { viewModel.deleteReminder(reminder) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "حذف یادآوری", tint = AccentRed)
+                        }
+                    }
+                }
+                Button(
+                    onClick = {
+                        val current = Calendar.getInstance()
+                        TimePickerDialog(context, { _, h, m ->
+                            val cal = Calendar.getInstance()
+                            cal.set(Calendar.HOUR_OF_DAY, h)
+                            cal.set(Calendar.MINUTE, m)
+                            cal.set(Calendar.SECOND, 0)
+                            if (cal.timeInMillis < System.currentTimeMillis()) {
+                                cal.add(Calendar.DAY_OF_YEAR, 1)
+                            }
+                            viewModel.addReminder(task, cal.timeInMillis, null)
+                        }, current.get(Calendar.HOUR_OF_DAY), current.get(Calendar.MINUTE), true).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue.copy(alpha = 0.2f))
+                ) {
+                    Text("افزودن یادآوری", color = AccentBlue)
                 }
             }
         },
