@@ -93,6 +93,8 @@ dependencies {
     // Datetime
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
     
+    // DataStore Preferences
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
     // Persian Date logic (If external library used, or we implement our own)
     // implementation("com.github.samanzamani:PersianDate:1.6.1")
 

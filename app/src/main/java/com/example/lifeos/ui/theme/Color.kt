@@ -2,48 +2,38 @@ package com.example.lifeos.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val PrimaryLight = Color(0xFF00668A)
-val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFC3E7FF)
-val OnPrimaryContainerLight = Color(0xFF001E2C)
-val SecondaryLight = Color(0xFF4E616D)
-val OnSecondaryLight = Color(0xFFFFFFFF)
-val SecondaryContainerLight = Color(0xFFD1E5F4)
-val OnSecondaryContainerLight = Color(0xFF0A1E28)
-val TertiaryLight = Color(0xFF605A7D)
-val OnTertiaryLight = Color(0xFFFFFFFF)
-val TertiaryContainerLight = Color(0xFFE6DEFF)
-val OnTertiaryContainerLight = Color(0xFF1C1736)
-val ErrorLight = Color(0xFFBA1A1A)
-val OnErrorLight = Color(0xFFFFFFFF)
-val ErrorContainerLight = Color(0xFFFFDAD6)
-val OnErrorContainerLight = Color(0xFF410002)
-val BackgroundLight = Color(0xFFFBFCFF)
-val OnBackgroundLight = Color(0xFF191C1E)
-val SurfaceLight = Color(0xFFFBFCFF)
-val OnSurfaceLight = Color(0xFF191C1E)
-val SurfaceVariantLight = Color(0xFFDCE3E9)
-val OnSurfaceVariantLight = Color(0xFF40484C)
+// Glassmorphism Dark Palette - Deep blues and purples
+val GlassPrimaryDark = Color(0xFF1A1A2E)
+val GlassSecondaryDark = Color(0xFF16213E)
+val GlassAccent = Color(0xFF0F3460)
+val GlassHighlight = Color(0xFF53A8B6)
 
-val PrimaryDark = Color(0xFF7BD0FF)
-val OnPrimaryDark = Color(0xFF003549)
-val PrimaryContainerDark = Color(0xFF004C69)
-val OnPrimaryContainerDark = Color(0xFFC3E7FF)
-val SecondaryDark = Color(0xFFB5C9D7)
-val OnSecondaryDark = Color(0xFF20333E)
-val SecondaryContainerDark = Color(0xFF374955)
-val OnSecondaryContainerDark = Color(0xFFD1E5F4)
-val TertiaryDark = Color(0xFFCAC1E9)
-val OnTertiaryDark = Color(0xFF312C4C)
-val TertiaryContainerDark = Color(0xFF484264)
-val OnTertiaryContainerDark = Color(0xFFE6DEFF)
-val ErrorDark = Color(0xFFFFB4AB)
-val OnErrorDark = Color(0xFF690005)
-val ErrorContainerDark = Color(0xFF93000A)
-val OnErrorContainerDark = Color(0xFFFFDAD6)
-val BackgroundDark = Color(0xFF191C1E)
-val OnBackgroundDark = Color(0xFFE1E2E5)
-val SurfaceDark = Color(0xFF191C1E)
-val OnSurfaceDark = Color(0xFFE1E2E5)
-val SurfaceVariantDark = Color(0xFF40484C)
-val OnSurfaceVariantDark = Color(0xFFC0C7CD)
+// Gradient Background Colors
+val GradientStart = Color(0xFF0D1B2A)
+val GradientMiddle = Color(0xFF1B2838)
+val GradientEnd = Color(0xFF1A1A2E)
+
+// Surface Colors (for glass cards)
+val GlassSurfaceLight = Color(0x1AFFFFFF) // White 10%
+val GlassSurfaceMedium = Color(0x26FFFFFF) // White 15%
+val GlassBorder = Color(0x40FFFFFF) // White 25%
+
+// Text Colors
+val TextPrimary = Color(0xFFF0F0F0)
+val TextSecondary = Color(0xB3F0F0F0) // 70% opacity
+val TextMuted = Color(0x80F0F0F0) // 50% opacity
+
+// Accent Colors
+val AccentBlue = Color(0xFF4FC3F7)
+val AccentTeal = Color(0xFF80CBC4)
+val AccentAmber = Color(0xFFFFD54F)
+val AccentPink = Color(0xFFF48FB1)
+val AccentGreen = Color(0xFF81C784)
+val AccentRed = Color(0xFFEF5350)
+
+// Priority Colors
+val PriorityNone = Color(0xFF78909C)
+val PriorityLow = AccentBlue
+val PriorityMedium = AccentAmber
+val PriorityHigh = Color(0xFFFF7043)
+val PriorityCritical = AccentRed

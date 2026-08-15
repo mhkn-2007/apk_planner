@@ -12,11 +12,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lifeos.ai.provider.AIProvider
+import com.example.lifeos.ui.components.glassCard
+import com.example.lifeos.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,10 +57,10 @@ class AIChatViewModel @Inject constructor(
         viewModelScope.launch {
             val aiMsgId = java.util.UUID.randomUUID().toString()
             var currentAiText = ""
-            
+
             _messages.value = _messages.value + ChatMessage(id = aiMsgId, text = currentAiText, isUser = false)
 
-            aiProvider.streamChat(text, "context: user is asking for scheduling").collect { chunk ->
+            aiProvider.streamChat(text, "context: user scheduling").collect { chunk ->
                 currentAiText = chunk
                 _messages.value = _messages.value.map {
                     if (it.id == aiMsgId) it.copy(text = currentAiText) else it
@@ -66,29 +71,39 @@ class AIChatViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
     val messages by viewModel.messages.collectAsState()
     val isTyping by viewModel.isTyping.collectAsState()
     var inputText by remember { mutableStateOf("") }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("دستیار هوشمند") }, // Persian: Smart Assistant
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(GradientStart, GradientMiddle, GradientEnd)
                 )
             )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header
+            Box(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                Column {
+                    Text(
+                        text = "دستیار هوشمند",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "من آماده کمک به شما هستم",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMuted
+                    )
+                }
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -97,45 +112,59 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
                 reverseLayout = false
             ) {
                 items(messages) { message ->
-                    ChatBubble(message)
+                    GlassChatBubble(message)
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
                 if (isTyping) {
                     item {
                         Text(
-                            text = "دستیار در حال تایپ است...", // Assistant is typing...
+                            text = "دستیار در حال تایپ است...",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = AccentTeal,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
                 }
             }
 
-            Row(
+            // Input Row
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(16.dp)
+                    .glassCard(cornerRadius = 28.dp)
+                    .padding(4.dp)
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("پیام خود را بنویسید...") }, // Write your message...
-                    shape = RoundedCornerShape(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        viewModel.sendMessage(inputText)
-                        inputText = ""
-                    },
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "ارسال") // Send
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("پیام خود را بنویسید...", color = TextMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            viewModel.sendMessage(inputText)
+                            inputText = ""
+                        }
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "ارسال",
+                            tint = AccentBlue
+                        )
+                    }
                 }
             }
         }
@@ -143,36 +172,28 @@ fun AIChatScreen(viewModel: AIChatViewModel = hiltViewModel()) {
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
-    val backgroundColor = if (message.isUser) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-
-    val textColor = if (message.isUser) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
+fun GlassChatBubble(message: ChatMessage) {
     val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment
     ) {
         Box(
             modifier = Modifier
+                .widthIn(max = 280.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(backgroundColor)
+                .background(
+                    if (message.isUser)
+                        Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.3f), AccentBlue.copy(alpha = 0.15f)))
+                    else
+                        Brush.linearGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.06f)))
+                )
                 .padding(12.dp)
         ) {
             Text(
                 text = message.text,
-                color = textColor,
+                color = TextPrimary,
                 style = MaterialTheme.typography.bodyLarge
             )
         }
