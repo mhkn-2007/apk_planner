@@ -30,8 +30,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
+import com.example.lifeos.data.database.dao.ProjectDao
+import com.example.lifeos.data.database.entities.GoalEntity
 import com.example.lifeos.data.database.entities.HabitEntity
+import com.example.lifeos.data.database.entities.ProjectEntity
 import com.example.lifeos.data.database.entities.TaskEntity
 import com.example.lifeos.domain.planner.DeterministicPlannerEngine
 import com.example.lifeos.domain.repositories.TaskRepository
@@ -83,6 +87,8 @@ class TodayViewModel @Inject constructor(
     private val alarmScheduler: AlarmScheduler,
     private val plannerEngine: DeterministicPlannerEngine,
     private val generateRecurringOccurrences: GenerateRecurringTaskOccurrencesUseCase,
+    private val goalDao: GoalDao,
+    private val projectDao: ProjectDao,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -95,6 +101,22 @@ class TodayViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    // Exposed so EditTaskDialog can offer a Goal/Project picker (prompt
+    // section 15-16: connecting daily tasks to long-term goals/projects).
+    val goals: StateFlow<List<GoalEntity>> = goalDao.getAllGoals()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val projects: StateFlow<List<ProjectEntity>> = projectDao.getAllProjects()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun linkTaskToGoal(task: TaskEntity, goalId: String?) {
+        viewModelScope.launch { taskRepository.updateTask(task.copy(goalId = goalId)) }
+    }
+
+    fun linkTaskToProject(task: TaskEntity, projectId: String?) {
+        viewModelScope.launch { taskRepository.updateTask(task.copy(projectId = projectId)) }
+    }
 
     private val _planningInsight = MutableStateFlow(PlanningInsight())
     val planningInsight: StateFlow<PlanningInsight> = _planningInsight.asStateFlow()
@@ -926,6 +948,8 @@ fun EditTaskDialog(
     val context = LocalContext.current
     val subtasks by viewModel.getSubtasksForTask(task.id).collectAsState()
     val reminders by viewModel.getRemindersForTask(task.id).collectAsState()
+    val goals by viewModel.goals.collectAsState()
+    val projects by viewModel.projects.collectAsState()
     var newSubtaskTitle by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -1092,6 +1116,51 @@ fun EditTaskDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = AccentBlue.copy(alpha = 0.2f))
                 ) {
                     Text("افزودن یادآوری", color = AccentBlue)
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                // --- Goal/Project link (prompt sections 15-16: connect daily
+                // tasks to long-term goals/projects) ---
+                Text("مرتبط با هدف:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    FilterChip(
+                        selected = task.goalId == null,
+                        onClick = { viewModel.linkTaskToGoal(task, null) },
+                        label = { Text("هیچکدام") }
+                    )
+                    goals.forEach { goal ->
+                        FilterChip(
+                            selected = task.goalId == goal.id,
+                            onClick = { viewModel.linkTaskToGoal(task, goal.id) },
+                            label = { Text(goal.title) }
+                        )
+                    }
+                }
+                if (goals.isEmpty()) {
+                    Text("هنوز هدفی تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("مرتبط با پروژه:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    FilterChip(
+                        selected = task.projectId == null,
+                        onClick = { viewModel.linkTaskToProject(task, null) },
+                        label = { Text("هیچکدام") }
+                    )
+                    projects.forEach { project ->
+                        FilterChip(
+                            selected = task.projectId == project.id,
+                            onClick = { viewModel.linkTaskToProject(task, project.id) },
+                            label = { Text(project.name) }
+                        )
+                    }
+                }
+                if (projects.isEmpty()) {
+                    Text("هنوز پروژه‌ای تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         },

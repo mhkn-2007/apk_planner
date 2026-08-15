@@ -4,14 +4,17 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
+import com.example.lifeos.data.database.dao.MilestoneDao
 import com.example.lifeos.data.database.dao.ProjectDao
 import com.example.lifeos.data.database.dao.ReminderDao
 import com.example.lifeos.data.database.dao.RoutineDao
 import com.example.lifeos.data.database.dao.SubtaskDao
 import com.example.lifeos.data.database.dao.TaskDao
 import com.example.lifeos.data.database.entities.GoalEntity
+import com.example.lifeos.data.database.entities.GoalMilestoneEntity
 import com.example.lifeos.data.database.entities.HabitEntity
 import com.example.lifeos.data.database.entities.ProjectEntity
+import com.example.lifeos.data.database.entities.ProjectMilestoneEntity
 import com.example.lifeos.data.database.entities.ReminderEntity
 import com.example.lifeos.data.database.entities.RoutineInstanceEntity
 import com.example.lifeos.data.database.entities.RoutineInstanceTaskEntity
@@ -31,9 +34,11 @@ import com.example.lifeos.data.database.entities.TaskEntity
         RoutineTemplateEntity::class,
         RoutineTemplateTaskEntity::class,
         RoutineInstanceEntity::class,
-        RoutineInstanceTaskEntity::class
+        RoutineInstanceTaskEntity::class,
+        GoalMilestoneEntity::class,
+        ProjectMilestoneEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {
@@ -44,4 +49,5 @@ abstract class LifeOSDatabase : RoomDatabase() {
     abstract fun subtaskDao(): SubtaskDao
     abstract fun reminderDao(): ReminderDao
     abstract fun routineDao(): RoutineDao
+    abstract fun milestoneDao(): MilestoneDao
 }

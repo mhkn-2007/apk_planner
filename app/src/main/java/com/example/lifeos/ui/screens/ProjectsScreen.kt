@@ -1,32 +1,42 @@
 package com.example.lifeos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lifeos.data.database.dao.GoalDao
+import com.example.lifeos.data.database.dao.MilestoneDao
 import com.example.lifeos.data.database.dao.ProjectDao
 import com.example.lifeos.data.database.entities.GoalEntity
+import com.example.lifeos.data.database.entities.GoalMilestoneEntity
 import com.example.lifeos.data.database.entities.ProjectEntity
+import com.example.lifeos.data.database.entities.ProjectMilestoneEntity
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -34,7 +44,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ProjectsViewModel @Inject constructor(
     private val goalDao: GoalDao,
-    private val projectDao: ProjectDao
+    private val projectDao: ProjectDao,
+    private val milestoneDao: MilestoneDao
 ) : ViewModel() {
 
     private val _goals = MutableStateFlow<List<GoalEntity>>(emptyList())
@@ -77,6 +88,54 @@ class ProjectsViewModel @Inject constructor(
                 )
             )
         }
+    }
+
+    fun getMilestonesForGoal(goalId: String): StateFlow<List<GoalMilestoneEntity>> {
+        return milestoneDao.getMilestonesForGoal(goalId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    fun addGoalMilestone(goalId: String, title: String, position: Int) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            milestoneDao.insertGoalMilestone(
+                GoalMilestoneEntity(goalId = goalId, title = title, position = position)
+            )
+        }
+    }
+
+    fun toggleGoalMilestone(milestone: GoalMilestoneEntity) {
+        viewModelScope.launch {
+            milestoneDao.updateGoalMilestone(milestone.copy(isCompleted = !milestone.isCompleted))
+        }
+    }
+
+    fun deleteGoalMilestone(milestone: GoalMilestoneEntity) {
+        viewModelScope.launch { milestoneDao.deleteGoalMilestone(milestone) }
+    }
+
+    fun getMilestonesForProject(projectId: String): StateFlow<List<ProjectMilestoneEntity>> {
+        return milestoneDao.getMilestonesForProject(projectId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    fun addProjectMilestone(projectId: String, title: String, position: Int) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            milestoneDao.insertProjectMilestone(
+                ProjectMilestoneEntity(projectId = projectId, title = title, position = position)
+            )
+        }
+    }
+
+    fun toggleProjectMilestone(milestone: ProjectMilestoneEntity) {
+        viewModelScope.launch {
+            milestoneDao.updateProjectMilestone(milestone.copy(isCompleted = !milestone.isCompleted))
+        }
+    }
+
+    fun deleteProjectMilestone(milestone: ProjectMilestoneEntity) {
+        viewModelScope.launch { milestoneDao.deleteProjectMilestone(milestone) }
     }
 }
 
@@ -128,17 +187,10 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 200.dp)
+                    modifier = Modifier.heightIn(max = 260.dp)
                 ) {
                     items(goals) { goal ->
-                        Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
-                            Column {
-                                Text(goal.title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
-                                goal.description?.let {
-                                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
+                        GoalCard(goal = goal, viewModel = viewModel)
                     }
                 }
             }
@@ -162,19 +214,7 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     modifier = Modifier.weight(1f)
                 ) {
                     items(projects) { project ->
-                        Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
-                            Column {
-                                Text(project.name, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
-                                project.description?.let {
-                                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
-                                }
-                                Text(
-                                    text = "وضعیت: ${project.status}",
-                                    color = AccentTeal,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        }
+                        ProjectCard(project = project, viewModel = viewModel)
                     }
                 }
             }
@@ -217,6 +257,161 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                 onDismiss = { showAddProjectDialog = false },
                 onAdd = { name, desc -> viewModel.addProject(name, desc, null); showAddProjectDialog = false }
             )
+        }
+    }
+}
+
+@Composable
+fun GoalCard(goal: GoalEntity, viewModel: ProjectsViewModel) {
+    val milestones by viewModel.getMilestonesForGoal(goal.id).collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+    var newMilestoneTitle by remember { mutableStateOf("") }
+    val completed = milestones.count { it.isCompleted }
+
+    Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(goal.title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
+                    goal.description?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (milestones.isNotEmpty()) {
+                        Text(
+                            "مایلستون‌ها: $completed/${milestones.size}",
+                            color = AccentAmber,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+                milestones.forEach { milestone ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Checkbox(
+                            checked = milestone.isCompleted,
+                            onCheckedChange = { viewModel.toggleGoalMilestone(milestone) }
+                        )
+                        Text(
+                            milestone.title,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textDecoration = if (milestone.isCompleted) TextDecoration.LineThrough else null
+                        )
+                        IconButton(onClick = { viewModel.deleteGoalMilestone(milestone) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "حذف", tint = AccentRed)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = newMilestoneTitle,
+                        onValueChange = { newMilestoneTitle = it },
+                        label = { Text("مایلستون جدید") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        if (newMilestoneTitle.isNotBlank()) {
+                            viewModel.addGoalMilestone(goal.id, newMilestoneTitle, milestones.size)
+                            newMilestoneTitle = ""
+                        }
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "افزودن", tint = AccentAmber)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProjectCard(project: ProjectEntity, viewModel: ProjectsViewModel) {
+    val milestones by viewModel.getMilestonesForProject(project.id).collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+    var newMilestoneTitle by remember { mutableStateOf("") }
+    val completed = milestones.count { it.isCompleted }
+
+    Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(project.name, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
+                    project.description?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(
+                        text = "وضعیت: ${project.status}",
+                        color = AccentTeal,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    if (milestones.isNotEmpty()) {
+                        Text(
+                            "مایلستون‌ها: $completed/${milestones.size}",
+                            color = AccentTeal,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+                milestones.forEach { milestone ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Checkbox(
+                            checked = milestone.isCompleted,
+                            onCheckedChange = { viewModel.toggleProjectMilestone(milestone) }
+                        )
+                        Text(
+                            milestone.title,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textDecoration = if (milestone.isCompleted) TextDecoration.LineThrough else null
+                        )
+                        IconButton(onClick = { viewModel.deleteProjectMilestone(milestone) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "حذف", tint = AccentRed)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = newMilestoneTitle,
+                        onValueChange = { newMilestoneTitle = it },
+                        label = { Text("مایلستون جدید") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        if (newMilestoneTitle.isNotBlank()) {
+                            viewModel.addProjectMilestone(project.id, newMilestoneTitle, milestones.size)
+                            newMilestoneTitle = ""
+                        }
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "افزودن", tint = AccentTeal)
+                    }
+                }
+            }
         }
     }
 }
