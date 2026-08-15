@@ -33,6 +33,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.lifeos.data.database.dao.HabitDao
 import com.example.lifeos.data.database.entities.HabitEntity
 import com.example.lifeos.data.database.entities.TaskEntity
+import com.example.lifeos.domain.planner.DeterministicPlannerEngine
 import com.example.lifeos.domain.repositories.TaskRepository
 import com.example.lifeos.domain.usecases.GetTodayTasksUseCase
 import com.example.lifeos.ui.components.glassCard
@@ -51,12 +52,33 @@ import javax.inject.Inject
 import java.util.UUID
 import java.util.Calendar
 
+/**
+ * Read-only summary of what [DeterministicPlannerEngine] found for today's
+ * task list (prompt sections 32-34: workload calculation + conflict
+ * detection, surfaced in the UI rather than only existing as unused
+ * domain logic).
+ */
+data class PlanningInsight(
+    val totalWorkloadMinutes: Int = 0,
+    val availableMinutes: Int = DEFAULT_AVAILABLE_MINUTES,
+    val conflicts: List<Pair<TaskEntity, TaskEntity>> = emptyList(),
+    val isOverloaded: Boolean = false
+) {
+    companion object {
+        // Prompt section 33 example uses a 5-hour available window; we default
+        // to a reasonable single-day working window when no user preference
+        // for available time exists yet.
+        const val DEFAULT_AVAILABLE_MINUTES = 5 * 60
+    }
+}
+
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val getTodayTasksUseCase: GetTodayTasksUseCase,
     private val taskRepository: TaskRepository,
     private val habitDao: HabitDao,
     private val alarmScheduler: AlarmScheduler,
+    private val plannerEngine: DeterministicPlannerEngine,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -70,12 +92,28 @@ class TodayViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    private val _planningInsight = MutableStateFlow(PlanningInsight())
+    val planningInsight: StateFlow<PlanningInsight> = _planningInsight.asStateFlow()
+
     init {
         viewModelScope.launch {
             getTodayTasksUseCase().collect { list ->
                 _tasks.value = list
+                recomputePlanningInsight(list)
             }
         }
+    }
+
+    private fun recomputePlanningInsight(tasks: List<TaskEntity>) {
+        val activeTasks = tasks.filter { !it.isCompleted }
+        val workload = plannerEngine.calculateTotalWorkload(activeTasks)
+        val conflicts = plannerEngine.detectConflicts(activeTasks)
+        _planningInsight.value = PlanningInsight(
+            totalWorkloadMinutes = workload,
+            availableMinutes = PlanningInsight.DEFAULT_AVAILABLE_MINUTES,
+            conflicts = conflicts,
+            isOverloaded = workload > PlanningInsight.DEFAULT_AVAILABLE_MINUTES
+        )
     }
 
     fun addTask(title: String, description: String, priority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null) {
@@ -325,6 +363,7 @@ fun TodayScreen(
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val habits by viewModel.habits.collectAsState()
+    val planningInsight by viewModel.planningInsight.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
     var showHabitsDialog by remember { mutableStateOf(false) }
@@ -391,6 +430,16 @@ fun TodayScreen(
                         Text("عادت‌ها", color = AccentGreen, fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+
+            if (planningInsight.isOverloaded || planningInsight.conflicts.isNotEmpty()) {
+                PlanningInsightCard(
+                    insight = planningInsight,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 12.dp)
+                )
             }
 
             if (tasks.isEmpty()) {
@@ -492,6 +541,43 @@ fun TodayScreen(
                     selectedTaskForEdit = null
                 }
             )
+        }
+    }
+}
+
+/**
+ * Surfaces [DeterministicPlannerEngine] output (prompt sections 33-34):
+ * warns when today's estimated workload exceeds the available window, and
+ * lists any time-overlapping tasks so the user can resolve them manually.
+ */
+@Composable
+fun PlanningInsightCard(insight: PlanningInsight, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.glassCard().padding(16.dp)) {
+        Column {
+            if (insight.isOverloaded) {
+                val workloadHours = insight.totalWorkloadMinutes / 60f
+                val availableHours = insight.availableMinutes / 60f
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Notifications, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "حجم کار امروز (%.1f ساعت) از زمان در دسترس (%.1f ساعت) بیشتره".format(workloadHours, availableHours),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AccentAmber,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            if (insight.conflicts.isNotEmpty()) {
+                if (insight.isOverloaded) Spacer(modifier = Modifier.height(8.dp))
+                insight.conflicts.forEach { (first, second) ->
+                    Text(
+                        text = "تداخل زمانی: «${first.title}» و «${second.title}»",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AccentRed
+                    )
+                }
+            }
         }
     }
 }
