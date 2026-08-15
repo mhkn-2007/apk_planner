@@ -88,20 +88,25 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     var showAddGoalDialog by remember { mutableStateOf(false) }
     var showAddProjectDialog by remember { mutableStateOf(false) }
 
+    // Dynamic gradient background depending on Light/Dark mode (previously
+    // hardcoded to always show the dark gradient regardless of theme setting).
+    val isLight = MaterialTheme.colorScheme.background == Color(0xFFF5F7FA)
+    val bgGradient = if (isLight) {
+        Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
+    } else {
+        Brush.verticalGradient(colors = listOf(GradientStart, GradientMiddle, GradientEnd))
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(GradientStart, GradientMiddle, GradientEnd)
-                )
-            )
+            .background(bgGradient)
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Text(
                 text = "اهداف و پروژه‌ها",
                 style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -115,7 +120,7 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     modifier = Modifier.fillMaxWidth().glassCard().padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("هنوز هدفی تعریف نشده", color = TextMuted)
+                    Text("هنوز هدفی تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
             } else {
                 LazyColumn(
@@ -125,9 +130,9 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     items(goals) { goal ->
                         Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
                             Column {
-                                Text(goal.title, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                                Text(goal.title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
                                 goal.description?.let {
-                                    Text(it, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -146,7 +151,7 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     modifier = Modifier.fillMaxWidth().glassCard().padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("هنوز پروژه‌ای تعریف نشده", color = TextMuted)
+                    Text("هنوز پروژه‌ای تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
             } else {
                 LazyColumn(
@@ -156,9 +161,9 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     items(projects) { project ->
                         Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
                             Column {
-                                Text(project.name, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                                Text(project.name, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
                                 project.description?.let {
-                                    Text(it, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                                 }
                                 Text(
                                     text = "وضعیت: ${project.status}",
@@ -219,8 +224,8 @@ fun SimpleAddDialog(title: String, nameLabel: String, onDismiss: () -> Unit, onA
     var desc by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, color = TextPrimary) },
-        containerColor = GlassSecondaryDark,
+        title = { Text(title, color = MaterialTheme.colorScheme.onBackground) },
+        containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(nameLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())

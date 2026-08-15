@@ -3,6 +3,7 @@ package com.example.lifeos.ui.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -30,6 +31,7 @@ import com.example.lifeos.ui.theme.*
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Today : Screen("today", "امروز", Icons.Default.Home)
     object Calendar : Screen("calendar", "تقویم", Icons.Default.DateRange)
+    object Projects : Screen("projects", "اهداف", Icons.Default.Flag)
     object Habits : Screen("habits", "عادت‌ها", Icons.Default.FavoriteBorder)
     object AIChat : Screen("ai_chat", "دستیار", Icons.Default.Star)
     object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
@@ -38,6 +40,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 val bottomNavItems = listOf(
     Screen.Today,
     Screen.Calendar,
+    Screen.Projects,
     Screen.Habits,
     Screen.AIChat,
     Screen.Settings
@@ -59,6 +62,9 @@ fun LifeOSNavHost(
         composable(Screen.Calendar.route) {
             CalendarScreen()
         }
+        composable(Screen.Projects.route) {
+            ProjectsScreen()
+        }
         composable(Screen.Habits.route) {
             HabitsScreen()
         }
@@ -73,12 +79,16 @@ fun LifeOSNavHost(
 
 @Composable
 fun LifeOSBottomNav(navController: NavHostController) {
+    // Previously hardcoded to always look dark (GlassPrimaryDark/TextPrimary/TextMuted)
+    // regardless of the user's light/dark theme setting. Now follows MaterialTheme
+    // like the rest of the app.
     NavigationBar(
-        containerColor = GlassPrimaryDark.copy(alpha = 0.95f),
-        contentColor = TextPrimary
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
+        val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
 
         bottomNavItems.forEach { screen ->
             val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
@@ -87,13 +97,13 @@ fun LifeOSBottomNav(navController: NavHostController) {
                     Icon(
                         screen.icon,
                         contentDescription = screen.title,
-                        tint = if (isSelected) AccentBlue else TextMuted
+                        tint = if (isSelected) AccentBlue else unselectedColor
                     )
                 },
                 label = {
                     Text(
                         screen.title,
-                        color = if (isSelected) AccentBlue else TextMuted
+                        color = if (isSelected) AccentBlue else unselectedColor
                     )
                 },
                 selected = isSelected,
