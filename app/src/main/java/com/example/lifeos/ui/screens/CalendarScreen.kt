@@ -106,7 +106,7 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
     }
 
     // Dynamic gradient backgrounds depending on Light/Dark mode
-    val isLight = MaterialTheme.colorScheme.background.toColorInt() == 0xFFF5F7FA.toInt()
+    val isLight = MaterialTheme.colorScheme.background == Color(0xFFF5F7FA)
     val bgGradient = if (isLight) {
         Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
     } else {
@@ -299,6 +299,4 @@ fun SimpleAddTaskForDateDialog(onDismiss: () -> Unit, onAdd: (String, String, In
     )
 }
 
-private fun Color.toColorInt(): Int {
-    return ((value shr 32) and 0xffffffff).toInt()
-}
+

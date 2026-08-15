@@ -18,8 +18,8 @@ import androidx.compose.ui.unit.dp
 fun Modifier.glassCard(
     cornerRadius: Dp = 20.dp
 ): Modifier = this.composed {
-    // Detect light vs dark by observing background brightness or primary container
-    val isDark = MaterialTheme.colorScheme.background.toColorInt() != 0xFFF5F7FA.toInt()
+    // Detect light vs dark by observing background color
+    val isDark = MaterialTheme.colorScheme.background != Color(0xFFF5F7FA)
     
     val glassColor = if (isDark) {
         Color.White.copy(alpha = 0.12f)
@@ -51,7 +51,7 @@ fun Modifier.glassCard(
 fun Modifier.glassSurface(
     cornerRadius: Dp = 24.dp
 ): Modifier = this.composed {
-    val isDark = MaterialTheme.colorScheme.background.toColorInt() != 0xFFF5F7FA.toInt()
+    val isDark = MaterialTheme.colorScheme.background != Color(0xFFF5F7FA)
     
     val glassColor = if (isDark) {
         Color.White.copy(alpha = 0.08f)
@@ -78,9 +78,4 @@ fun Modifier.glassSurface(
             ),
             shape = RoundedCornerShape(cornerRadius)
         )
-}
-
-// Helper to convert Color to Int for simple comparison
-private fun Color.toColorInt(): Int {
-    return ((value shr 32) and 0xffffffff).toInt()
 }
