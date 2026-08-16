@@ -49,9 +49,15 @@ class AIToolCatalog @Inject constructor(
     private fun prop(type: String, description: String): JSONObject =
         JSONObject().put("type", type).put("description", description)
 
+    private fun arrayProp(itemType: String, description: String): JSONObject =
+        JSONObject()
+            .put("type", "ARRAY")
+            .put("items", JSONObject().put("type", itemType))
+            .put("description", description)
+
     /** Function declarations sent to Gemini on every turn (read + action tools, sections 21-22). */
     fun buildFunctionDeclarations(): JSONArray = JSONArray().apply {
-        // --- Read tools ---
+        // --- Read tools (section 21) ---
         put(obj("get_tasks", "همه‌ی کارهای موجود در برنامه را برمی‌گرداند.", JSONObject()))
         put(obj("get_today_tasks", "کارهای امروز را برمی‌گرداند.", JSONObject()))
         put(obj("get_unfinished_tasks", "کارهای ناتمامی که موعدشان گذشته را برمی‌گرداند.", JSONObject()))
@@ -62,7 +68,26 @@ class AIToolCatalog @Inject constructor(
         put(obj("get_productivity_history", "خلاصه‌ی وضعیت بهره‌وری چند روز اخیر را برمی‌گرداند.",
             JSONObject().put("daysBack", prop("INTEGER", "تعداد روزهای گذشته برای بررسی، پیش‌فرض ۷"))))
 
-        // --- Action tools ---
+        // --- Daily / weekly planning context (sections 23, 24) ---
+        put(obj(
+            "get_daily_planning_context",
+            "برای برنامه‌ریزی فردا: کارهای ناتمام، کارهای فردا، حجم کاری کل، تداخل‌های زمانی، و پیشنهاد کارهایی که باید عقب بیفتند را برمی‌گرداند. قبل از پیشنهاد برنامه‌ی فردا حتماً این ابزار را صدا بزن.",
+            JSONObject().put("availableTimeMinutes", prop("INTEGER", "زمان در دسترس فردا به دقیقه، پیش‌فرض ۴۸۰ (۸ ساعت)"))
+        ))
+        put(obj(
+            "get_weekly_planning_context",
+            "برای برنامه‌ریزی هفته: کارهای هفته‌ی پیش‌رو، کارهای ناتمام، حجم کاری کل، و پیشنهاد کارهایی که باید عقب بیفتند را برمی‌گرداند. قبل از پیشنهاد برنامه‌ی هفتگی حتماً این ابزار را صدا بزن.",
+            JSONObject().put("availableTimeMinutesPerDay", prop("INTEGER", "زمان در دسترس روزانه به دقیقه، پیش‌فرض ۴۸۰"))
+        ))
+
+        // --- Daily review (section 30) ---
+        put(obj(
+            "get_daily_review",
+            "برای مرور روز: کارهای تکمیل‌شده و عقب‌افتاده، مجموع زمان فوکوس، و تعداد عادت‌های انجام‌شده در یک روز مشخص را برمی‌گرداند.",
+            JSONObject().put("offsetDays", prop("INTEGER", "افست روز نسبت به امروز؛ ۰ برای امروز، منفی‌یک برای دیروز، پیش‌فرض ۰"))
+        ))
+
+        // --- Action tools (section 22) ---
         put(obj(
             "create_task", "یک کار جدید ایجاد می‌کند.",
             JSONObject().apply {
@@ -87,6 +112,15 @@ class AIToolCatalog @Inject constructor(
             required = listOf("taskId", "newDueDateMillis")
         ))
         put(obj(
+            "reschedule_unfinished_tasks",
+            "چند کار ناتمام را یکجا به تاریخ جدید منتقل می‌کند (برای «امروز نتونستم کارهام رو انجام بدم، برای فردا برنامه‌ریزی کن»). اگر تعداد زیاد باشد، پاسخ نیازمند تأیید کاربر خواهد بود.",
+            JSONObject().apply {
+                put("taskIds", arrayProp("STRING", "شناسه‌ی کارهایی که باید منتقل شوند"))
+                put("newDueDateMillis", prop("NUMBER", "موعد جدید به میلی‌ثانیه"))
+            },
+            required = listOf("taskIds", "newDueDateMillis")
+        ))
+        put(obj(
             "create_reminder", "یک یادآوری برای یک کار اضافه می‌کند.",
             JSONObject().apply {
                 put("taskId", prop("STRING", "شناسه‌ی کار"))
@@ -99,7 +133,7 @@ class AIToolCatalog @Inject constructor(
             "create_routine", "یک روتین جدید با چند کار می‌سازد.",
             JSONObject().apply {
                 put("name", prop("STRING", "نام روتین"))
-                put("taskTitles", JSONObject().put("type", "ARRAY").put("items", JSONObject().put("type", "STRING")).put("description", "لیست عناوین کارهای روتین"))
+                put("taskTitles", arrayProp("STRING", "لیست عناوین کارهای روتین"))
             },
             required = listOf("name", "taskTitles")
         ))
@@ -119,11 +153,23 @@ class AIToolCatalog @Inject constructor(
             },
             required = listOf("name")
         ))
+        put(obj(
+            "break_down_goal",
+            "یک قصد یا هدف کاربر (مثلاً «می‌خوام برای آزمون آماده بشم») را به یک هدف، یک پروژه، چند نقطه‌عطف، و چند کار مشخص تبدیل می‌کند. اگر اطلاعات کافی برای ساختن کارهای دقیق نداری، همین ابزار را فقط با milestoneTitles یا حتی بدون tasks صدا بزن و بعد از کاربر جزئیات بیشتر بپرس.",
+            JSONObject().apply {
+                put("goalTitle", prop("STRING", "عنوان هدف بلندمدت"))
+                put("goalDescription", prop("STRING", "توضیح هدف، اختیاری"))
+                put("projectName", prop("STRING", "نام پروژه، اختیاری (پیش‌فرض همان عنوان هدف)"))
+                put("milestoneTitles", arrayProp("STRING", "عناوین نقاط عطف پروژه، اختیاری"))
+                put("taskTitles", arrayProp("STRING", "عناوین کارهایی که باید ساخته شوند، اختیاری"))
+            },
+            required = listOf("goalTitle")
+        ))
         // High-impact bulk actions — dispatch() routes these to a
         // confirmation step instead of applying immediately.
         put(obj(
             "delete_low_priority_tasks", "چند کار کم‌اهمیت را حذف می‌کند (نیازمند تأیید کاربر برای تعداد زیاد).",
-            JSONObject().put("taskIds", JSONObject().put("type", "ARRAY").put("items", JSONObject().put("type", "STRING")).put("description", "شناسه‌ی کارهایی که باید حذف شوند")),
+            JSONObject().put("taskIds", arrayProp("STRING", "شناسه‌ی کارهایی که باید حذف شوند")),
             required = listOf("taskIds")
         ))
     }
@@ -151,6 +197,42 @@ class AIToolCatalog @Inject constructor(
                     "postponedTasks" to summary.postponedTasks
                 ))
             }
+            "get_daily_planning_context" -> {
+                val ctx = readTools.getDailyPlanningContext(args.optInt("availableTimeMinutes", 8 * 60))
+                ok(name, mapOf(
+                    "unfinishedTasks" to ctx.unfinishedTasks.map { it.title },
+                    "tomorrowTasks" to ctx.tomorrowTasks.map { it.title },
+                    "prioritizedOrder" to ctx.prioritizedTasks.map { it.title },
+                    "totalWorkloadMinutes" to ctx.totalWorkloadMinutes,
+                    "availableTimeMinutes" to ctx.availableTimeMinutes,
+                    "conflicts" to ctx.conflictingPairs.map { "${it.first.title} <-> ${it.second.title}" },
+                    "fitsInAvailableTime" to ctx.fitsInAvailableTime.map { it.title },
+                    "suggestedPostponements" to ctx.suggestedPostponements.map { it.title }
+                ))
+            }
+            "get_weekly_planning_context" -> {
+                val ctx = readTools.getWeeklyPlanningContext(args.optInt("availableTimeMinutesPerDay", 8 * 60))
+                ok(name, mapOf(
+                    "weekTasks" to ctx.weekTasks.map { it.title },
+                    "unfinishedTasks" to ctx.unfinishedTasks.map { it.title },
+                    "prioritizedOrder" to ctx.prioritizedTasks.map { it.title },
+                    "totalWorkloadMinutes" to ctx.totalWorkloadMinutes,
+                    "availableTimeMinutesForWeek" to ctx.availableTimeMinutesForWeek,
+                    "fitsInAvailableTime" to ctx.fitsInAvailableTime.map { it.title },
+                    "suggestedPostponements" to ctx.suggestedPostponements.map { it.title }
+                ))
+            }
+            "get_daily_review" -> {
+                val review = readTools.getDailyReview(args.optInt("offsetDays", 0))
+                ok(name, mapOf(
+                    "completedTasks" to review.completedTasks.map { it.title },
+                    "postponedTasks" to review.postponedTasks.map { it.title },
+                    "focusMinutesSpent" to review.focusSecondsSpent / 60,
+                    "completedFocusSessions" to review.completedFocusSessions,
+                    "totalHabits" to review.totalHabits,
+                    "completedHabitCount" to review.completedHabitCount
+                ))
+            }
             "create_task" -> fromToolResult(name, actionTools.createTask(
                 title = args.getString("title"),
                 dueDateMillis = args.optLongOrNull("dueDateMillis"),
@@ -162,32 +244,36 @@ class AIToolCatalog @Inject constructor(
                 taskId = args.getString("taskId"),
                 newDueDateMillis = args.getLong("newDueDateMillis")
             ))
+            "reschedule_unfinished_tasks" -> {
+                val ids = args.stringList("taskIds")
+                val newDue = args.getLong("newDueDateMillis")
+                fromToolResult(name, actionTools.rescheduleUnfinishedTasks(ids, newDue), kind = PendingConfirmation.Kind.MOVE_TASKS, newDueDateMillis = newDue)
+            }
             "create_reminder" -> fromToolResult(name, actionTools.createReminder(
                 taskId = args.getString("taskId"),
                 triggerTimeMillis = args.getLong("triggerTimeMillis"),
                 message = args.optStringOrNull("message")
             ))
             "create_routine" -> {
-                val titles = args.optJSONArray("taskTitles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList()
+                val titles = args.stringList("taskTitles")
                 fromToolResult(name, actionTools.createRoutine(args.getString("name"), titles))
             }
             "create_goal" -> fromToolResult(name, actionTools.createGoal(args.getString("title"), args.optStringOrNull("description")))
             "create_project" -> fromToolResult(name, actionTools.createProject(args.getString("name"), args.optStringOrNull("goalId")))
+            "break_down_goal" -> {
+                val milestoneTitles = args.stringList("milestoneTitles")
+                val taskTitles = args.stringList("taskTitles")
+                fromToolResult(name, actionTools.breakDownGoal(
+                    goalTitle = args.getString("goalTitle"),
+                    goalDescription = args.optStringOrNull("goalDescription"),
+                    projectName = args.optStringOrNull("projectName"),
+                    milestoneTitles = milestoneTitles,
+                    tasks = taskTitles.map { AIToolLayer.BreakdownTask(title = it) }
+                ))
+            }
             "delete_low_priority_tasks" -> {
-                val ids = args.optJSONArray("taskIds")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList()
-                when (val result = actionTools.deleteLowPriorityTasks(ids)) {
-                    is AIToolLayer.ToolResult.RequiresConfirmation -> DispatchResult(
-                        functionName = name,
-                        responseJson = JSONObject().put("status", "awaiting_confirmation").put("description", result.description),
-                        requiresConfirmation = true,
-                        pendingConfirmation = PendingConfirmation(
-                            description = result.description,
-                            kind = PendingConfirmation.Kind.DELETE_TASKS,
-                            taskIds = result.affectedTaskIds
-                        )
-                    )
-                    else -> fromToolResult(name, result)
-                }
+                val ids = args.stringList("taskIds")
+                fromToolResult(name, actionTools.deleteLowPriorityTasks(ids), kind = PendingConfirmation.Kind.DELETE_TASKS)
             }
             else -> DispatchResult(name, JSONObject().put("status", "error").put("message", "ابزار ناشناخته: $name"))
         }
@@ -201,14 +287,26 @@ class AIToolCatalog @Inject constructor(
     private fun ok(name: String, data: Any): DispatchResult =
         DispatchResult(name, JSONObject().put("status", "ok").put("data", data.toString()))
 
-    private fun fromToolResult(name: String, result: AIToolLayer.ToolResult): DispatchResult = when (result) {
+    /**
+     * [kind]/[newDueDateMillis] are only used if [result] turns out to be
+     * [AIToolLayer.ToolResult.RequiresConfirmation] — they tell
+     * [applyConfirmation] which follow-up action to run once the user
+     * approves. Defaults to DELETE_TASKS for backward compatibility with
+     * callers that only ever produce delete-confirmations.
+     */
+    private fun fromToolResult(
+        name: String,
+        result: AIToolLayer.ToolResult,
+        kind: PendingConfirmation.Kind = PendingConfirmation.Kind.DELETE_TASKS,
+        newDueDateMillis: Long? = null
+    ): DispatchResult = when (result) {
         is AIToolLayer.ToolResult.Success -> DispatchResult(name, JSONObject().put("status", "ok").put("message", result.message))
         is AIToolLayer.ToolResult.Failure -> DispatchResult(name, JSONObject().put("status", "error").put("message", result.reason))
         is AIToolLayer.ToolResult.RequiresConfirmation -> DispatchResult(
             functionName = name,
             responseJson = JSONObject().put("status", "awaiting_confirmation").put("description", result.description),
             requiresConfirmation = true,
-            pendingConfirmation = PendingConfirmation(result.description, PendingConfirmation.Kind.DELETE_TASKS, result.affectedTaskIds)
+            pendingConfirmation = PendingConfirmation(result.description, kind, result.affectedTaskIds, newDueDateMillis)
         )
     }
 }
@@ -216,3 +314,5 @@ class AIToolCatalog @Inject constructor(
 private fun JSONObject.optLongOrNull(key: String): Long? = if (has(key) && !isNull(key)) getLong(key) else null
 private fun JSONObject.optIntOrNull(key: String): Int? = if (has(key) && !isNull(key)) getInt(key) else null
 private fun JSONObject.optStringOrNull(key: String): String? = if (has(key) && !isNull(key)) getString(key) else null
+private fun JSONObject.stringList(key: String): List<String> =
+    optJSONArray(key)?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList()
