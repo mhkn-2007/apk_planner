@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import com.example.lifeos.data.database.dao.AIActionDao
 import com.example.lifeos.data.database.dao.AIConversationDao
 import com.example.lifeos.data.database.dao.CalendarEventDao
+import com.example.lifeos.data.database.dao.CategoryDao
 import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
@@ -19,6 +20,7 @@ import com.example.lifeos.data.database.entities.AIActionEntity
 import com.example.lifeos.data.database.entities.AIConversationEntity
 import com.example.lifeos.data.database.entities.AIMessageEntity
 import com.example.lifeos.data.database.entities.CalendarEventEntity
+import com.example.lifeos.data.database.entities.CategoryEntity
 import com.example.lifeos.data.database.entities.FocusSessionEntity
 import com.example.lifeos.data.database.entities.GoalEntity
 import com.example.lifeos.data.database.entities.GoalMilestoneEntity
@@ -53,9 +55,10 @@ import com.example.lifeos.data.database.entities.TaskEntity
         AIConversationEntity::class,
         AIMessageEntity::class,
         AIActionEntity::class,
-        CalendarEventEntity::class
+        CalendarEventEntity::class,
+        CategoryEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {
@@ -72,4 +75,5 @@ abstract class LifeOSDatabase : RoomDatabase() {
     abstract fun aiConversationDao(): AIConversationDao
     abstract fun aiActionDao(): AIActionDao
     abstract fun calendarEventDao(): CalendarEventDao
+    abstract fun categoryDao(): CategoryDao
 }

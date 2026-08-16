@@ -7,6 +7,7 @@ import com.example.lifeos.data.database.TaskRepositoryImpl
 import com.example.lifeos.data.database.dao.AIActionDao
 import com.example.lifeos.data.database.dao.AIConversationDao
 import com.example.lifeos.data.database.dao.CalendarEventDao
+import com.example.lifeos.data.database.dao.CategoryDao
 import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
@@ -87,6 +88,11 @@ object DatabaseModule {
     @Provides
     fun provideFocusSessionDao(database: LifeOSDatabase): FocusSessionDao {
         return database.focusSessionDao()
+    }
+
+    @Provides
+    fun provideCategoryDao(database: LifeOSDatabase): CategoryDao {
+        return database.categoryDao()
     }
 
     @Provides

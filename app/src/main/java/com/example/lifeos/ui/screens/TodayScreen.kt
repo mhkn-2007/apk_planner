@@ -95,6 +95,7 @@ class TodayViewModel @Inject constructor(
     private val generateRecurringOccurrences: GenerateRecurringTaskOccurrencesUseCase,
     private val goalDao: GoalDao,
     private val projectDao: ProjectDao,
+    private val categoryDao: com.example.lifeos.data.database.dao.CategoryDao,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -115,6 +116,34 @@ class TodayViewModel @Inject constructor(
 
     val projects: StateFlow<List<ProjectEntity>> = projectDao.getAllProjects()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Categories (prompt section 44: Category). Exposed the same way as
+    // goals/projects above so EditTaskDialog/TasksScreen can offer a picker
+    // and filter chips without each needing their own DAO wiring.
+    val categories: StateFlow<List<com.example.lifeos.data.database.entities.CategoryEntity>> =
+        categoryDao.getAllCategories()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun createCategory(name: String, colorHex: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            categoryDao.insertCategory(
+                com.example.lifeos.data.database.entities.CategoryEntity(name = name.trim(), colorHex = colorHex)
+            )
+        }
+    }
+
+    /** Deletes a category and clears it off any task that referenced it (never deletes the tasks themselves). */
+    fun deleteCategory(category: com.example.lifeos.data.database.entities.CategoryEntity) {
+        viewModelScope.launch {
+            categoryDao.clearCategoryFromTasks(category.id)
+            categoryDao.deleteCategory(category)
+        }
+    }
+
+    fun linkTaskToCategory(task: TaskEntity, categoryId: String?) {
+        viewModelScope.launch { taskRepository.updateTask(task.copy(categoryId = categoryId)) }
+    }
 
     fun linkTaskToGoal(task: TaskEntity, goalId: String?) {
         viewModelScope.launch { taskRepository.updateTask(task.copy(goalId = goalId)) }
@@ -1076,6 +1105,7 @@ fun EditTaskDialog(
     val reminders by viewModel.getRemindersForTask(task.id).collectAsState()
     val goals by viewModel.goals.collectAsState()
     val projects by viewModel.projects.collectAsState()
+    val categories by viewModel.categories.collectAsState()
     var newSubtaskTitle by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -1300,6 +1330,30 @@ fun EditTaskDialog(
                 }
                 if (projects.isEmpty()) {
                     Text("هنوز پروژه‌ای تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("دسته‌بندی:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    FilterChip(
+                        selected = task.categoryId == null,
+                        onClick = { viewModel.linkTaskToCategory(task, null) },
+                        label = { Text("هیچکدام") }
+                    )
+                    categories.forEach { category ->
+                        FilterChip(
+                            selected = task.categoryId == category.id,
+                            onClick = { viewModel.linkTaskToCategory(task, category.id) },
+                            label = { Text(category.name) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(android.graphics.Color.parseColor(category.colorHex)).copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+                }
+                if (categories.isEmpty()) {
+                    Text("هنوز دسته‌ای تعریف نشده — از صفحه‌ی «کارها» می‌توانید دسته بسازید", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         },

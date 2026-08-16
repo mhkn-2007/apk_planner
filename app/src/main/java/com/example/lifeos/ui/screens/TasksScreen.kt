@@ -1,12 +1,16 @@
 package com.example.lifeos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,13 +52,17 @@ fun TasksScreen(
         viewModel.observeArchivedTasks().collect { archivedTasksState.value = it }
     }
     val archivedTasks = archivedTasksState.value
+    val categories by viewModel.categories.collectAsState()
 
     var query by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf(TaskStatusFilter.ACTIVE) }
     var sortOrder by remember { mutableStateOf(TaskSortOrder.DUE_DATE) }
     var selectedTaskForEdit by remember { mutableStateOf<TaskEntity?>(null) }
+    // null = no category filter applied (prompt section 44: Category).
+    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
+    var showCategoryManager by remember { mutableStateOf(false) }
 
-    val filtered = remember(allTasks, archivedTasks, query, statusFilter, sortOrder) {
+    val filtered = remember(allTasks, archivedTasks, query, statusFilter, sortOrder, selectedCategoryId) {
         val source = if (statusFilter == TaskStatusFilter.ARCHIVED) archivedTasks else allTasks
         source
             .filter { task ->
@@ -67,7 +75,8 @@ fun TasksScreen(
                     TaskStatusFilter.COMPLETED -> task.isCompleted
                     TaskStatusFilter.ARCHIVED -> true
                 }
-                matchesQuery && matchesStatus
+                val matchesCategory = selectedCategoryId == null || task.categoryId == selectedCategoryId
+                matchesQuery && matchesStatus && matchesCategory
             }
             .let { list ->
                 when (sortOrder) {
@@ -163,6 +172,33 @@ fun TasksScreen(
                         label = { Text("جدیدترین") }
                     )
                 }
+
+                if (categories.isNotEmpty() || selectedCategoryId != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        FilterChip(
+                            selected = selectedCategoryId == null,
+                            onClick = { selectedCategoryId = null },
+                            label = { Text("همه‌ی دسته‌ها") }
+                        )
+                        categories.forEach { category ->
+                            FilterChip(
+                                selected = selectedCategoryId == category.id,
+                                onClick = { selectedCategoryId = if (selectedCategoryId == category.id) null else category.id },
+                                label = { Text(category.name) }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                TextButton(onClick = { showCategoryManager = true }) {
+                    Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("مدیریت دسته‌بندی‌ها", style = MaterialTheme.typography.bodySmall)
+                }
             }
 
             if (filtered.isEmpty()) {
@@ -214,5 +250,112 @@ fun TasksScreen(
                 }
             )
         }
+
+        if (showCategoryManager) {
+            CategoryManagerDialog(
+                categories = categories,
+                onDismiss = { showCategoryManager = false },
+                onCreate = { name, color -> viewModel.createCategory(name, color) },
+                onDelete = { category ->
+                    if (selectedCategoryId == category.id) selectedCategoryId = null
+                    viewModel.deleteCategory(category)
+                }
+            )
+        }
     }
+}
+
+/**
+ * Create/delete UI for categories (prompt section 44/50). Kept minimal and
+ * scoped to the Tasks screen — categories are an organizational aid, not a
+ * separate top-level concept the prompt calls for its own nav item, so a
+ * dedicated screen would be over-building this.
+ */
+@Composable
+private fun CategoryManagerDialog(
+    categories: List<com.example.lifeos.data.database.entities.CategoryEntity>,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, colorHex: String) -> Unit,
+    onDelete: (com.example.lifeos.data.database.entities.CategoryEntity) -> Unit
+) {
+    var newName by remember { mutableStateOf("") }
+    val palette = listOf("#4A90D9", "#50C878", "#E67E22", "#E74C3C", "#9B59B6", "#1ABC9C")
+    var selectedColor by remember { mutableStateOf(palette.first()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("دسته‌بندی‌ها", color = MaterialTheme.colorScheme.onBackground) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        text = {
+            Column {
+                categories.forEach { category ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .background(
+                                    androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(category.colorHex)),
+                                    androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(category.name, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
+                        IconButton(onClick = { onDelete(category) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "حذف دسته", tint = AccentRed)
+                        }
+                    }
+                }
+                if (categories.isNotEmpty()) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                }
+                Text("دسته‌ی جدید:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("نام دسته") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    palette.forEach { hex ->
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(
+                                    androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(hex)),
+                                    androidx.compose.foundation.shape.CircleShape
+                                )
+                                .then(
+                                    if (selectedColor == hex) {
+                                        Modifier.border(2.dp, MaterialTheme.colorScheme.onBackground, androidx.compose.foundation.shape.CircleShape)
+                                    } else Modifier
+                                )
+                                .clickable { selectedColor = hex }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            onCreate(newName, selectedColor)
+                            newName = ""
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    enabled = newName.isNotBlank()
+                ) {
+                    Text("افزودن دسته")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("بستن") }
+        }
+    )
 }
