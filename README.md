@@ -10,18 +10,18 @@
 
 ### 🔴 جدی
 
-1. **پیشرفت اهداف/پروژه‌ها محاسبه نمی‌شود** — `GoalEntity.progressPercentage` و `ProjectEntity.progressPercentage` هیچ‌جا آپدیت نمی‌شوند و همیشه صفر می‌مانند، در حالی که صفحه‌ی Analytics و Goals/Projects به آن‌ها ارجاع می‌دهند (بخش ۱۵-۱۶-۱۹ پرامپت).
-2. **Time Blocking بصری و نماهای تقویم (بخش ۱۳-۱۴)** — تقویم فعلی فقط یک grid ماهانه + لیست ساده‌ی تسک‌های روز انتخاب‌شده است. Day view، Week view، و Timeline/schedule view با بلوک‌های زمانی واضح (مثال پرامپت: «۰۸:۰۰–۰۹:۰۰ مطالعه») وجود ندارد.
+1. ~~**پیشرفت اهداف/پروژه‌ها محاسبه نمی‌شود** — `GoalEntity.progressPercentage` و `ProjectEntity.progressPercentage` هیچ‌جا آپدیت نمی‌شوند و همیشه صفر می‌مانند.~~ **فیکس شد** — `GoalProjectProgressUseCase` اضافه شد؛ پیشرفت واقعی از روی مایلستون‌ها (یا در نبود آن‌ها، نسبت تسک‌های تکمیل‌شده) محاسبه و ذخیره می‌شود.
+2. ~~**Time Blocking بصری و نماهای تقویم (بخش ۱۳-۱۴)** — تقویم فعلی فقط یک grid ماهانه + لیست ساده‌ی تسک‌های روز انتخاب‌شده است.~~ **فیکس شد** — `DayTimelineView` واقعی با تشخیص تداخل (`DeterministicPlannerEngine.detectConflicts`) اضافه شد.
 
 ### 🟠 مهم
 
-3. **Archive و Duplicate تسک (بخش ۷)** — کاربر نمی‌تواند یک تسک را آرشیو یا کپی کند؛ نه فیلد `isArchived` در دیتابیس هست، نه دکمه‌ای در UI.
-4. **`CalendarEventEntity` کد مرده‌ی جدید** — Entity و DAO برای رویدادهای تقویم خارجی (بخش ۱۳: آمادگی برای Google Calendar/Outlook) ساخته شده ولی هیچ صفحه یا ViewModel ای از آن استفاده نمی‌کند؛ همان الگوی «کد مرده»ای که در فاز ۲ (۲.۱۱) شناسایی و حذف شده بود.
+3. ~~**Archive و Duplicate تسک (بخش ۷)** — کاربر نمی‌تواند یک تسک را آرشیو یا کپی کند.~~ **فیکس شد** — `isArchived` + آرشیو/کپی کامل با UI (منوی overflow روی کارت تسک، فیلتر «آرشیو» در صفحه‌ی Tasks). کپی، زیرکارها و یادآوری‌ها را هم منتقل می‌کند.
+4. ~~**`CalendarEventEntity` کد مرده‌ی جدید**~~ **فیکس شد** — به `CalendarViewModel`/`CalendarScreen` وصل شد؛ کاربر می‌تواند رویداد دستی اضافه/حذف کند.
 
 ### 🟡 متوسط
 
-5. **ویرایش/کپی روتین از طریق UI ممکن نیست** — `AIToolLayer.updateRoutine` وجود دارد ولی در `RoutinesScreen` فقط دکمه‌ی حذف هست، نه ویرایش یا Duplicate (بخش ۱۲).
-6. **`Category`/`Tag` (بخش ۴۴) هنوز پیاده نشده** — نه Entity، نه UI فیلتر/دسته‌بندی تسک بر این اساس.
+5. ~~**ویرایش/کپی روتین از طریق UI ممکن نیست**~~ **فیکس شد** — `updateTemplate`/`duplicateTemplate` + منوی overflow روی کارت روتین.
+6. ~~**`Category`/`Tag` (بخش ۴۴) هنوز پیاده نشده**~~ **فیکس شد** — `CategoryEntity` + UI کامل ایجاد/حذف/فیلتر/اتصال به تسک.
 
 ## بازبینی مستقل دوم (این نوبت)
 
@@ -29,7 +29,13 @@
 
 ### 🔴 جدی
 
-7. **بخش ۵۷ (Testing) عملاً پوشش داده نشده** — پرامپت به‌صراحت تست خودکار برای موارد زیادی خواسته: task creation/update/completion، multiple reminders، recurring tasks، routine templates/instances، goals، projects، habits، focus sessions، analytics، scheduling/conflict detection، AI action parsing/authorization، database relationships، offline behavior. فایل تست فعلی (`LifeOSTests.kt`) فقط تبدیل تقویم جلالی را پوشش می‌دهد (۸ تست، همگی خوب و دقیق) — هیچ تست دیگری در پروژه وجود ندارد. مشخصاً `DeterministicPlannerEngine` (که منطق اصلی sort/workload/conflict-detection را دارد) و `AIToolLayer`/`AIToolCatalog` (منطق اعتبارسنجی و مسیر تأیید عملیات پرتاثیر) هیچ تست واحدی ندارند، با اینکه هر دو منطق تجاری حساس و خطاپذیری هستند.
+7. **بخش ۵۷ (Testing) عملاً پوشش داده نشده** — پرامپت به‌صراحت تست خودکار برای موارد زیادی خواسته: task creation/update/completion، multiple reminders، recurring tasks، routine templates/instances، goals، projects، habits، focus sessions، analytics، scheduling/conflict detection، AI action parsing/authorization، database relationships، offline behavior. فایل تست فعلی (`LifeOSTests.kt`) فقط تبدیل تقویم جلالی را پوشش می‌دهد (۸ تست) — هیچ تست دیگری در پروژه وجود نداشت.
+
+**وضعیت: بخشی فیکس شد.** دو فایل تست جدید اضافه شد:
+- `DeterministicPlannerEngineTest` — پوشش کامل sort/workload/conflict-detection/postponement. در همین حین یک باگ واقعی هم پیدا و فیکس شد: `detectConflicts` قبلاً فقط جفت‌های همسایه (بعد از مرتب‌سازی بر اساس زمان شروع) را بررسی می‌کرد، پس تداخل بین یک تسک با بازه‌ی زمانی پهن و یک تسک غیرهمسایه که داخل آن بازه بود ممکن بود اصلاً تشخیص داده نشود؛ الگوریتم به مقایسه‌ی کامل (با یک بهینه‌سازی early-break صحیح) تغییر کرد.
+- `AIToolLayerTest` — با MockK (وابستگی تست جدید، چون قبلاً هیچ کتابخانه‌ی mock‌سازی در پروژه نبود)، پوشش validation (عنوان خالی، clamp کردن اولویت خارج از بازه‌ی ۰-۴)، حالت‌های not-found، و مهم‌تر از همه رفتار آستانه‌ی تأیید (بخش ۳۵): تأیید شد که حذف/جابجایی گروهی بالای `CONFIRMATION_THRESHOLD` واقعاً چیزی را تغییر نمی‌دهد تا کاربر صریحاً تأیید کند.
+- **توجه مهم:** این تست‌ها با بررسی دستی دقیق امضای هر متد در سورس نوشته و منطقشان ردیابی شده (از جمله شبیه‌سازی الگوریتم `detectConflicts` با پایتون برای اطمینان از صحت انتظارات)، ولی محیط sandbox اجازه‌ی اجرای واقعی Gradle/JUnit را نمی‌دهد (دسترسی شبکه به `google()`/`mavenCentral()` مسدود است) — پس صحت کامپایل و پاس‌شدن واقعی این تست‌ها هنوز با یک build واقعی تأیید نشده.
+- **هنوز باقی‌مانده:** بقیه‌ی موارد بخش ۵۷ (task CRUD، multiple reminders، recurring tasks، routine templates/instances، goals، projects، habits، focus sessions، analytics، AI action parsing/authorization در سطح `AIToolCatalog`، database relationships، offline behavior) هنوز تست ندارند — این‌ها عمدتاً نیازمند Room in-memory database testing یا Hilt test setup هستند که زیرساخت جداگانه‌ای می‌طلبد.
 
 ### 🟡 متوسط
 
@@ -37,4 +43,4 @@
 
 ## وضعیت فازها
 
-فازهای ۱ تا ۹ (طبق `BUGS_AND_GAPS.md`) همگی انجام شده‌اند؛ مورد ۱ در این فاصله فیکس شد. موارد ۲، ۳، ۴، ۵، ۶، ۷، ۸ هنوز باز هستند و در نوبت‌های بعدی رفع می‌شوند. از این‌ها، مورد ۷ (فقدان تست خودکار برای اکثر منطق تجاری) بزرگ‌ترین ریسک کیفیت محصول است چون پرامپت آن را صریحاً به‌عنوان یک نیازمندی جدا (بخش ۵۷) خواسته و رگرسیون در فازهای بعدی را زودتر تشخیص نمی‌دهد.
+فازهای ۱ تا ۹ (طبق `BUGS_AND_GAPS.md`) همگی انجام شده‌اند. موارد ۱ تا ۶ فیکس شدند. مورد ۷ بخشی فیکس شد (دو کلاس منطق تجاری حساس تست شدند، مابقی بخش ۵۷ باز است). مورد ۸ هنوز باز است.

@@ -25,21 +25,33 @@ class DeterministicPlannerEngine @Inject constructor() {
     }
 
     /**
-     * Detects overlapping scheduled tasks. 
-     * Returns a list of tasks that conflict with each other.
+     * Detects overlapping scheduled tasks (prompt section 34: "Detect...
+     * Overlapping tasks... Overlapping time blocks").
+     *
+     * Compares every scheduled task against every other, not just adjacent
+     * pairs in start-time order: a task spanning a wide window can conflict
+     * with a later task that doesn't conflict with the tasks in between (a
+     * containing block. e.g. 09:00-11:00 vs a task at 10:15-10:45, with an
+     * unrelated 09:30-10:00 task also in the list). Comparing only
+     * neighbours after sorting misses that pair. With N scheduled tasks this
+     * is O(N^2), acceptable for a single day's task list.
      */
     fun detectConflicts(tasks: List<TaskEntity>): List<Pair<TaskEntity, TaskEntity>> {
         val conflicts = mutableListOf<Pair<TaskEntity, TaskEntity>>()
         val scheduledTasks = tasks.filter { it.startTimeMillis != null && it.endTimeMillis != null }
             .sortedBy { it.startTimeMillis }
 
-        for (i in 0 until scheduledTasks.size - 1) {
-            val current = scheduledTasks[i]
-            val next = scheduledTasks[i + 1]
-            
-            // If the next task starts before the current one ends, it's a conflict
-            if (next.startTimeMillis!! < current.endTimeMillis!!) {
-                conflicts.add(Pair(current, next))
+        for (i in scheduledTasks.indices) {
+            for (j in i + 1 until scheduledTasks.size) {
+                val current = scheduledTasks[i]
+                val other = scheduledTasks[j]
+                // Sorted by start time, so other.startTimeMillis >= current.startTimeMillis
+                // always holds here; once other starts at/after current ends,
+                // nothing later in the sorted list can overlap current either
+                // (their starts only increase), so it's safe to stop scanning
+                // forward for this `current`.
+                if (other.startTimeMillis!! >= current.endTimeMillis!!) break
+                conflicts.add(Pair(current, other))
             }
         }
         return conflicts
