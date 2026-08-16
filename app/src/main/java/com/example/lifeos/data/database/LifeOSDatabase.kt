@@ -2,6 +2,7 @@ package com.example.lifeos.data.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.example.lifeos.data.database.dao.AIConversationDao
 import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
@@ -12,6 +13,8 @@ import com.example.lifeos.data.database.dao.ReminderDao
 import com.example.lifeos.data.database.dao.RoutineDao
 import com.example.lifeos.data.database.dao.SubtaskDao
 import com.example.lifeos.data.database.dao.TaskDao
+import com.example.lifeos.data.database.entities.AIConversationEntity
+import com.example.lifeos.data.database.entities.AIMessageEntity
 import com.example.lifeos.data.database.entities.FocusSessionEntity
 import com.example.lifeos.data.database.entities.GoalEntity
 import com.example.lifeos.data.database.entities.GoalMilestoneEntity
@@ -42,9 +45,11 @@ import com.example.lifeos.data.database.entities.TaskEntity
         RoutineInstanceTaskEntity::class,
         GoalMilestoneEntity::class,
         ProjectMilestoneEntity::class,
-        FocusSessionEntity::class
+        FocusSessionEntity::class,
+        AIConversationEntity::class,
+        AIMessageEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {
@@ -58,4 +63,5 @@ abstract class LifeOSDatabase : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
     abstract fun milestoneDao(): MilestoneDao
     abstract fun focusSessionDao(): FocusSessionDao
+    abstract fun aiConversationDao(): AIConversationDao
 }
