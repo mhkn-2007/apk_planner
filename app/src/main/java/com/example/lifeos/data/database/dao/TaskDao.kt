@@ -71,4 +71,18 @@ interface TaskDao {
 
     @Query("SELECT completedAtMillis FROM tasks WHERE isCompleted = 1 AND completedAtMillis BETWEEN :startMillis AND :endMillis")
     suspend fun getCompletionTimestampsInRange(startMillis: Long, endMillis: Long): List<Long?>
+
+    // --- Goal/Project progress (sections 15-16: "Progress" field on both) ---
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE goalId = :goalId")
+    suspend fun countTasksForGoal(goalId: String): Int
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE goalId = :goalId AND isCompleted = 1")
+    suspend fun countCompletedTasksForGoal(goalId: String): Int
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE projectId = :projectId")
+    suspend fun countTasksForProject(projectId: String): Int
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE projectId = :projectId AND isCompleted = 1")
+    suspend fun countCompletedTasksForProject(projectId: String): Int
 }

@@ -25,6 +25,12 @@ interface TaskRepository {
     suspend fun countPostponedInRange(startMillis: Long, endMillis: Long): Int
     suspend fun getCompletionTimestampsInRange(startMillis: Long, endMillis: Long): List<Long?>
 
+    // Goal/Project progress (sections 15-16)
+    suspend fun countTasksForGoal(goalId: String): Int
+    suspend fun countCompletedTasksForGoal(goalId: String): Int
+    suspend fun countTasksForProject(projectId: String): Int
+    suspend fun countCompletedTasksForProject(projectId: String): Int
+
     // Subtasks
     fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>>
     suspend fun insertSubtask(subtask: SubtaskEntity)

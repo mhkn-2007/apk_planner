@@ -29,6 +29,7 @@ import com.example.lifeos.data.database.entities.GoalEntity
 import com.example.lifeos.data.database.entities.GoalMilestoneEntity
 import com.example.lifeos.data.database.entities.ProjectEntity
 import com.example.lifeos.data.database.entities.ProjectMilestoneEntity
+import com.example.lifeos.domain.usecases.GoalProjectProgressUseCase
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,7 +46,8 @@ import javax.inject.Inject
 class ProjectsViewModel @Inject constructor(
     private val goalDao: GoalDao,
     private val projectDao: ProjectDao,
-    private val milestoneDao: MilestoneDao
+    private val milestoneDao: MilestoneDao,
+    private val progressUseCase: GoalProjectProgressUseCase
 ) : ViewModel() {
 
     private val _goals = MutableStateFlow<List<GoalEntity>>(emptyList())
@@ -95,23 +97,42 @@ class ProjectsViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
+    fun toggleGoalMilestone(milestone: GoalMilestoneEntity) {
+        viewModelScope.launch {
+            milestoneDao.updateGoalMilestone(milestone.copy(isCompleted = !milestone.isCompleted))
+            refreshGoalProgress(milestone.goalId)
+        }
+    }
+
+    fun deleteGoalMilestone(milestone: GoalMilestoneEntity) {
+        viewModelScope.launch {
+            milestoneDao.deleteGoalMilestone(milestone)
+            refreshGoalProgress(milestone.goalId)
+        }
+    }
+
     fun addGoalMilestone(goalId: String, title: String, position: Int) {
         if (title.isBlank()) return
         viewModelScope.launch {
             milestoneDao.insertGoalMilestone(
                 GoalMilestoneEntity(goalId = goalId, title = title, position = position)
             )
+            refreshGoalProgress(goalId)
         }
     }
 
-    fun toggleGoalMilestone(milestone: GoalMilestoneEntity) {
-        viewModelScope.launch {
-            milestoneDao.updateGoalMilestone(milestone.copy(isCompleted = !milestone.isCompleted))
-        }
-    }
-
-    fun deleteGoalMilestone(milestone: GoalMilestoneEntity) {
-        viewModelScope.launch { milestoneDao.deleteGoalMilestone(milestone) }
+    /**
+     * Recomputes this goal's progress (prompt sections 15-16: milestone-based
+     * when milestones exist, else task-completion ratio — see
+     * [GoalProjectProgressUseCase]) and persists it to
+     * [GoalEntity.progressPercentage] so every screen that reads the stored
+     * field (e.g. Analytics) sees an up-to-date number, not the permanent 0
+     * it used to be stuck at.
+     */
+    private suspend fun refreshGoalProgress(goalId: String) {
+        val percentage = progressUseCase.computeGoalProgress(goalId)
+        val goal = _goals.value.find { it.id == goalId } ?: goalDao.getGoalById(goalId) ?: return
+        goalDao.updateGoal(goal.copy(progressPercentage = percentage))
     }
 
     fun getMilestonesForProject(projectId: String): StateFlow<List<ProjectMilestoneEntity>> {
@@ -125,17 +146,40 @@ class ProjectsViewModel @Inject constructor(
             milestoneDao.insertProjectMilestone(
                 ProjectMilestoneEntity(projectId = projectId, title = title, position = position)
             )
+            refreshProjectProgress(projectId)
         }
     }
 
     fun toggleProjectMilestone(milestone: ProjectMilestoneEntity) {
         viewModelScope.launch {
             milestoneDao.updateProjectMilestone(milestone.copy(isCompleted = !milestone.isCompleted))
+            refreshProjectProgress(milestone.projectId)
         }
     }
 
     fun deleteProjectMilestone(milestone: ProjectMilestoneEntity) {
-        viewModelScope.launch { milestoneDao.deleteProjectMilestone(milestone) }
+        viewModelScope.launch {
+            milestoneDao.deleteProjectMilestone(milestone)
+            refreshProjectProgress(milestone.projectId)
+        }
+    }
+
+    private suspend fun refreshProjectProgress(projectId: String) {
+        val percentage = progressUseCase.computeProjectProgress(projectId)
+        val project = _projects.value.find { it.id == projectId } ?: return
+        projectDao.updateProject(project.copy(progressPercentage = percentage))
+    }
+
+    /**
+     * A goal's progress can also move because a linked task was
+     * completed/uncompleted elsewhere (Today, Tasks, AI) rather than through
+     * a milestone toggle here — recompute on demand so the displayed number
+     * is never stale just because this screen wasn't open when the task
+     * changed.
+     */
+    suspend fun refreshAllProgress() {
+        _goals.value.forEach { refreshGoalProgress(it.id) }
+        _projects.value.forEach { refreshProjectProgress(it.id) }
     }
 }
 
@@ -143,6 +187,13 @@ class ProjectsViewModel @Inject constructor(
 fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     val goals by viewModel.goals.collectAsState()
     var showAddGoalDialog by remember { mutableStateOf(false) }
+
+    // Refresh progress on entering the screen so a task completed elsewhere
+    // (Today/Tasks/AI) since the last visit is reflected immediately, not
+    // just after the next milestone toggle.
+    LaunchedEffect(goals.map { it.id }) {
+        viewModel.refreshAllProgress()
+    }
 
     val isLight = !LocalIsDarkTheme.current
     val bgGradient = if (isLight) {
@@ -214,6 +265,10 @@ fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
 fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     val projects by viewModel.projects.collectAsState()
     var showAddProjectDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(projects.map { it.id }) {
+        viewModel.refreshAllProgress()
+    }
 
     // Dynamic gradient background depending on Light/Dark mode (previously
     // hardcoded to always show the dark gradient regardless of theme setting,
@@ -312,6 +367,23 @@ fun GoalCard(goal: GoalEntity, viewModel: ProjectsViewModel) {
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
+                    // Real, computed progress (prompt sections 15-16), not a
+                    // stored value nothing ever set.
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LinearProgressIndicator(
+                            progress = { goal.progressPercentage / 100f },
+                            modifier = Modifier.weight(1f).height(6.dp),
+                            color = AccentAmber,
+                            trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "${goal.progressPercentage}٪",
+                            color = AccentAmber,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -388,6 +460,21 @@ fun ProjectCard(project: ProjectEntity, viewModel: ProjectsViewModel) {
                     if (milestones.isNotEmpty()) {
                         Text(
                             "مایلستون‌ها: $completed/${milestones.size}",
+                            color = AccentTeal,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LinearProgressIndicator(
+                            progress = { project.progressPercentage / 100f },
+                            modifier = Modifier.weight(1f).height(6.dp),
+                            color = AccentTeal,
+                            trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "${project.progressPercentage}٪",
                             color = AccentTeal,
                             style = MaterialTheme.typography.labelSmall
                         )

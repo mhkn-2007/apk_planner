@@ -71,6 +71,22 @@ class TaskRepositoryImpl @Inject constructor(
         return taskDao.getCompletionTimestampsInRange(startMillis, endMillis)
     }
 
+    override suspend fun countTasksForGoal(goalId: String): Int {
+        return taskDao.countTasksForGoal(goalId)
+    }
+
+    override suspend fun countCompletedTasksForGoal(goalId: String): Int {
+        return taskDao.countCompletedTasksForGoal(goalId)
+    }
+
+    override suspend fun countTasksForProject(projectId: String): Int {
+        return taskDao.countTasksForProject(projectId)
+    }
+
+    override suspend fun countCompletedTasksForProject(projectId: String): Int {
+        return taskDao.countCompletedTasksForProject(projectId)
+    }
+
     override fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>> {
         return subtaskDao.getSubtasksForTask(taskId)
     }
