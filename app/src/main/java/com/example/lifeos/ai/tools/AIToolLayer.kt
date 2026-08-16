@@ -1,10 +1,13 @@
 package com.example.lifeos.ai.tools
 
 import com.example.lifeos.data.database.dao.GoalDao
+import com.example.lifeos.data.database.dao.MilestoneDao
 import com.example.lifeos.data.database.dao.ProjectDao
 import com.example.lifeos.data.database.dao.RoutineDao
 import com.example.lifeos.data.database.entities.GoalEntity
+import com.example.lifeos.data.database.entities.GoalMilestoneEntity
 import com.example.lifeos.data.database.entities.ProjectEntity
+import com.example.lifeos.data.database.entities.ProjectMilestoneEntity
 import com.example.lifeos.data.database.entities.ReminderEntity
 import com.example.lifeos.data.database.entities.RoutineTemplateEntity
 import com.example.lifeos.data.database.entities.RoutineTemplateTaskEntity
@@ -34,7 +37,8 @@ class AIToolLayer @Inject constructor(
     private val taskRepository: TaskRepository,
     private val goalDao: GoalDao,
     private val projectDao: ProjectDao,
-    private val routineDao: RoutineDao
+    private val routineDao: RoutineDao,
+    private val milestoneDao: MilestoneDao
 ) {
     companion object {
         /** Above this many affected tasks, an action requires explicit confirmation. */
@@ -188,6 +192,81 @@ class AIToolLayer @Inject constructor(
     }
 
     // ---------------------------------------------------------------
+    // Task breakdown: intention -> Goal -> Project -> Milestones -> Tasks
+    // (prompt section 26). This is the single tool that performs the whole
+    // chain in one controlled, atomic-ish operation instead of the model
+    // having to issue create_goal/create_project/... separately and risk a
+    // half-finished structure if one step fails or the model gets confused.
+    // ---------------------------------------------------------------
+
+    /** One task to create as part of a goal/project breakdown. */
+    data class BreakdownTask(
+        val title: String,
+        val estimatedDurationMinutes: Int? = null,
+        val dueDateMillis: Long? = null,
+        val priority: Int = 2
+    )
+
+    /**
+     * Creates a Goal, an associated Project, a set of Project Milestones, and
+     * a set of Tasks linked to that project — turning a stated intention
+     * ("می‌خوام برای آزمون آماده بشم") into the structured chain the prompt
+     * describes: Goal -> Project -> Milestones -> Tasks -> Schedule.
+     *
+     * All parts happen even if the model only supplies partial data:
+     * milestones and tasks are optional (a bare goal+project is still a
+     * valid, useful structure the user can build on manually afterward).
+     */
+    suspend fun breakDownGoal(
+        goalTitle: String,
+        goalDescription: String? = null,
+        projectName: String? = null,
+        milestoneTitles: List<String> = emptyList(),
+        tasks: List<BreakdownTask> = emptyList()
+    ): ToolResult {
+        if (goalTitle.isBlank()) return ToolResult.Failure("عنوان هدف نمی‌تواند خالی باشد.")
+
+        val goal = GoalEntity(title = goalTitle.trim(), description = goalDescription)
+        goalDao.insertGoal(goal)
+
+        val project = ProjectEntity(
+            name = (projectName ?: goalTitle).trim(),
+            goalId = goal.id,
+            description = goalDescription
+        )
+        projectDao.insertProject(project)
+
+        milestoneTitles.forEachIndexed { index, title ->
+            if (title.isNotBlank()) {
+                milestoneDao.insertProjectMilestone(
+                    ProjectMilestoneEntity(projectId = project.id, title = title.trim(), position = index)
+                )
+            }
+        }
+
+        var createdTaskCount = 0
+        for (t in tasks) {
+            if (t.title.isBlank()) continue
+            taskRepository.insertTask(
+                TaskEntity(
+                    title = t.title.trim(),
+                    estimatedDurationMinutes = t.estimatedDurationMinutes,
+                    dueDateMillis = t.dueDateMillis,
+                    priority = t.priority.coerceIn(0, 4),
+                    goalId = goal.id,
+                    projectId = project.id
+                )
+            )
+            createdTaskCount++
+        }
+
+        return ToolResult.Success(
+            "هدف «${goal.title}» با پروژه «${project.name}»، " +
+                "${milestoneTitles.count { it.isNotBlank() }} نقطه‌عطف و $createdTaskCount کار ایجاد شد."
+        )
+    }
+
+    // ---------------------------------------------------------------
     // High-impact / bulk operations — require confirmation (section 35)
     // ---------------------------------------------------------------
 
@@ -233,6 +312,21 @@ class AIToolLayer @Inject constructor(
             moved++
         }
         return ToolResult.Success("$moved کار جابجا شد.")
+    }
+
+    /**
+     * Convenience entry point for AI-driven rescheduling (prompt section 27:
+     * "امروز نتونستم کارهام رو انجام بدم، برای فردا برنامه‌ریزی کن"). Moves a
+     * set of unfinished tasks to a new due date. Goes through the same
+     * preview/confirm bulk-move mechanism as [previewMoveTasks] so a large
+     * batch still requires the user's explicit approval (prompt section 35).
+     */
+    suspend fun rescheduleUnfinishedTasks(taskIds: List<String>, newDueDateMillis: Long): ToolResult {
+        if (taskIds.isEmpty()) return ToolResult.Failure("کاری برای جابجایی مشخص نشده است.")
+        if (taskIds.size <= CONFIRMATION_THRESHOLD) {
+            return confirmMoveTasks(taskIds, newDueDateMillis)
+        }
+        return previewMoveTasks(taskIds, newDueDateMillis)
     }
 
     /**

@@ -1,7 +1,9 @@
 package com.example.lifeos.ai.tools
 
+import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
+import com.example.lifeos.data.database.dao.HabitLogDao
 import com.example.lifeos.data.database.dao.ProjectDao
 import com.example.lifeos.data.database.dao.RoutineDao
 import com.example.lifeos.data.database.entities.GoalEntity
@@ -9,6 +11,7 @@ import com.example.lifeos.data.database.entities.HabitEntity
 import com.example.lifeos.data.database.entities.ProjectEntity
 import com.example.lifeos.data.database.entities.RoutineTemplateEntity
 import com.example.lifeos.data.database.entities.TaskEntity
+import com.example.lifeos.domain.planner.DeterministicPlannerEngine
 import com.example.lifeos.domain.repositories.TaskRepository
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
@@ -31,7 +34,10 @@ class AIReadTools @Inject constructor(
     private val goalDao: GoalDao,
     private val projectDao: ProjectDao,
     private val habitDao: HabitDao,
-    private val routineDao: RoutineDao
+    private val routineDao: RoutineDao,
+    private val focusSessionDao: FocusSessionDao,
+    private val habitLogDao: HabitLogDao,
+    private val plannerEngine: DeterministicPlannerEngine
 ) {
     private fun startOfDay(offsetDays: Int = 0): Long = Calendar.getInstance().apply {
         add(Calendar.DAY_OF_YEAR, offsetDays)
@@ -101,5 +107,138 @@ class AIReadTools @Inject constructor(
         val totalTasks: Int,
         val completedTasks: Int,
         val postponedTasks: Int
+    )
+
+    // ---------------------------------------------------------------
+    // Daily / Weekly planning support (prompt sections 23, 24)
+    // ---------------------------------------------------------------
+
+    /**
+     * Everything the AI needs to build tomorrow's plan in one call: unfinished
+     * (overdue) tasks, tasks already scheduled for tomorrow, and a
+     * workload/conflict analysis from [DeterministicPlannerEngine] (prompt
+     * section 32: the AI may use this engine, but the engine itself has no
+     * dependency back on the AI).
+     */
+    suspend fun getDailyPlanningContext(availableTimeMinutes: Int = 8 * 60): DailyPlanningContext {
+        val unfinished = getUnfinishedTasks()
+        val tomorrow = getTomorrowTasks()
+        val candidateTasks = (unfinished + tomorrow).distinctBy { it.id }
+
+        val sorted = plannerEngine.sortTasksByPriority(candidateTasks)
+        val totalWorkload = plannerEngine.calculateTotalWorkload(candidateTasks)
+        val conflicts = plannerEngine.detectConflicts(candidateTasks)
+        val (fits, postponeCandidates) = plannerEngine.suggestPostponements(candidateTasks, availableTimeMinutes)
+
+        return DailyPlanningContext(
+            unfinishedTasks = unfinished,
+            tomorrowTasks = tomorrow,
+            prioritizedTasks = sorted,
+            totalWorkloadMinutes = totalWorkload,
+            availableTimeMinutes = availableTimeMinutes,
+            conflictingPairs = conflicts,
+            fitsInAvailableTime = fits,
+            suggestedPostponements = postponeCandidates
+        )
+    }
+
+    data class DailyPlanningContext(
+        val unfinishedTasks: List<TaskEntity>,
+        val tomorrowTasks: List<TaskEntity>,
+        val prioritizedTasks: List<TaskEntity>,
+        val totalWorkloadMinutes: Int,
+        val availableTimeMinutes: Int,
+        val conflictingPairs: List<Pair<TaskEntity, TaskEntity>>,
+        val fitsInAvailableTime: List<TaskEntity>,
+        val suggestedPostponements: List<TaskEntity>
+    )
+
+    /**
+     * The equivalent of [getDailyPlanningContext] but across the next 7 days,
+     * for "برنامه این هفته‌ام رو بچین" (prompt section 24).
+     */
+    suspend fun getWeeklyPlanningContext(availableTimeMinutesPerDay: Int = 8 * 60): WeeklyPlanningContext {
+        val weekTasks = taskRepository.getTasksForDateRange(startOfDay(0), endOfDay(6)).first()
+        val unfinished = getUnfinishedTasks()
+        val allCandidates = (weekTasks + unfinished).distinctBy { it.id }
+
+        val sorted = plannerEngine.sortTasksByPriority(allCandidates)
+        val totalWorkload = plannerEngine.calculateTotalWorkload(allCandidates)
+        val availableTimeMinutesForWeek = availableTimeMinutesPerDay * 7
+        val (fits, postponeCandidates) = plannerEngine.suggestPostponements(allCandidates, availableTimeMinutesForWeek)
+
+        return WeeklyPlanningContext(
+            weekTasks = weekTasks,
+            unfinishedTasks = unfinished,
+            prioritizedTasks = sorted,
+            totalWorkloadMinutes = totalWorkload,
+            availableTimeMinutesForWeek = availableTimeMinutesForWeek,
+            fitsInAvailableTime = fits,
+            suggestedPostponements = postponeCandidates
+        )
+    }
+
+    data class WeeklyPlanningContext(
+        val weekTasks: List<TaskEntity>,
+        val unfinishedTasks: List<TaskEntity>,
+        val prioritizedTasks: List<TaskEntity>,
+        val totalWorkloadMinutes: Int,
+        val availableTimeMinutesForWeek: Int,
+        val fitsInAvailableTime: List<TaskEntity>,
+        val suggestedPostponements: List<TaskEntity>
+    )
+
+    // ---------------------------------------------------------------
+    // Daily review (prompt section 30)
+    // ---------------------------------------------------------------
+
+    /**
+     * get_daily_review: a same-day (or arbitrary offsetDays) summary of
+     * completed vs. postponed tasks, focus sessions, and habit completion —
+     * everything the AI needs to "help the user review their day" without
+     * inventing numbers (prompt section 30 explicitly lists these four
+     * categories: completed tasks, postponed tasks, focus sessions, habits).
+     */
+    suspend fun getDailyReview(offsetDays: Int = 0): DailyReview {
+        val dayTasks = taskRepository.getTasksForDateRange(startOfDay(offsetDays), endOfDay(offsetDays)).first()
+        val completedTasks = dayTasks.filter { it.isCompleted }
+        val postponedTasks = dayTasks.filter { !it.isCompleted }
+
+        val focusSeconds = focusSessionDao.getTotalFocusSecondsInRange(startOfDay(offsetDays), endOfDay(offsetDays))
+        val completedFocusSessions = focusSessionDao.getCompletedWorkSessionCountInRange(
+            startOfDay(offsetDays), endOfDay(offsetDays)
+        )
+
+        val habits = habitDao.getAllHabits().first()
+        val dateKey = dateKeyForOffset(offsetDays)
+        val completedHabitCount = habits.count { habitLogDao.hasLogForDate(it.id, dateKey) }
+
+        return DailyReview(
+            completedTasks = completedTasks,
+            postponedTasks = postponedTasks,
+            focusSecondsSpent = focusSeconds,
+            completedFocusSessions = completedFocusSessions,
+            totalHabits = habits.size,
+            completedHabitCount = completedHabitCount
+        )
+    }
+
+    private fun dateKeyForOffset(offsetDays: Int): String {
+        // habit_logs.dateKey stores a JALALI "yyyy-MM-dd" key (see
+        // HabitsScreen.toggleHabitStreak), not a Gregorian one — this must
+        // match exactly or getDailyReview() would silently undercount
+        // completed habits by comparing against the wrong calendar.
+        val millis = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offsetDays) }.timeInMillis
+        val jalali = com.example.lifeos.util.JalaliCalendarUtil.gregorianToJalali(millis)
+        return String.format("%04d-%02d-%02d", jalali.year, jalali.month, jalali.day)
+    }
+
+    data class DailyReview(
+        val completedTasks: List<TaskEntity>,
+        val postponedTasks: List<TaskEntity>,
+        val focusSecondsSpent: Int,
+        val completedFocusSessions: Int,
+        val totalHabits: Int,
+        val completedHabitCount: Int
     )
 }
