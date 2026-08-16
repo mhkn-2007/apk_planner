@@ -27,13 +27,24 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :taskId")
     suspend fun getTaskById(taskId: String): TaskEntity?
 
-    @Query("SELECT * FROM tasks ORDER BY dueDateMillis ASC")
+    // Archived tasks (prompt section 7: "Archive tasks") are hidden from
+    // every normal listing/scheduling query below — archiving removes a
+    // task from view without deleting it, so its rows still count toward
+    // analytics/goal-progress queries further down, which intentionally do
+    // NOT filter on isArchived.
+    @Query("SELECT * FROM tasks WHERE isArchived = 0 ORDER BY dueDateMillis ASC")
     fun getAllTasks(): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE dueDateMillis >= :startOfDay AND dueDateMillis <= :endOfDay")
+    @Query("SELECT * FROM tasks WHERE isArchived = 0 AND dueDateMillis >= :startOfDay AND dueDateMillis <= :endOfDay")
     fun getTasksForDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND dueDateMillis < :currentTimeMillis")
+    @Query("SELECT * FROM tasks WHERE isArchived = 1 ORDER BY dueDateMillis DESC")
+    fun getArchivedTasks(): Flow<List<TaskEntity>>
+
+    @Query("UPDATE tasks SET isArchived = :archived WHERE id = :taskId")
+    suspend fun setArchived(taskId: String, archived: Boolean)
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND isArchived = 0 AND dueDateMillis < :currentTimeMillis")
     suspend fun getOverdueTasks(currentTimeMillis: Long): List<TaskEntity>
 
     /**

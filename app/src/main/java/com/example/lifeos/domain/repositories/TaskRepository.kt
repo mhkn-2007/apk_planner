@@ -14,6 +14,10 @@ interface TaskRepository {
     fun getAllTasks(): Flow<List<TaskEntity>>
     fun getTasksForDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TaskEntity>>
 
+    // Archive (prompt section 7)
+    fun getArchivedTasks(): Flow<List<TaskEntity>>
+    suspend fun setArchived(taskId: String, archived: Boolean)
+
     // Recurrence (prompt section 11)
     suspend fun getExistingOccurrenceDates(groupId: String, startOfDay: Long, endOfDay: Long): List<Long?>
     fun getTasksForRecurrenceGroup(groupId: String): Flow<List<TaskEntity>>

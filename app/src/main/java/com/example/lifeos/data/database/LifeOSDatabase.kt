@@ -55,7 +55,7 @@ import com.example.lifeos.data.database.entities.TaskEntity
         AIActionEntity::class,
         CalendarEventEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {

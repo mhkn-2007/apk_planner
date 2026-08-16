@@ -43,6 +43,14 @@ class TaskRepositoryImpl @Inject constructor(
         return taskDao.getTasksForDateRange(startOfDay, endOfDay)
     }
 
+    override fun getArchivedTasks(): Flow<List<TaskEntity>> {
+        return taskDao.getArchivedTasks()
+    }
+
+    override suspend fun setArchived(taskId: String, archived: Boolean) {
+        taskDao.setArchived(taskId, archived)
+    }
+
     override suspend fun getExistingOccurrenceDates(groupId: String, startOfDay: Long, endOfDay: Long): List<Long?> {
         return taskDao.getExistingOccurrenceDates(groupId, startOfDay, endOfDay)
     }

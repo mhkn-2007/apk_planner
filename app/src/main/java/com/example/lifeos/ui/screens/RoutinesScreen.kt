@@ -11,7 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -112,6 +115,50 @@ class RoutinesViewModel @Inject constructor(
     }
 
     /**
+     * Replaces a template's name/description and its entire ordered task
+     * list (prompt section 12: "Edit routines"). Existing RoutineInstances
+     * created from this template are untouched — per the template/instance
+     * separation the prompt requires, editing a template must never
+     * retroactively change a day's already-snapshotted instance.
+     */
+    fun updateTemplate(template: RoutineTemplateEntity, name: String, description: String, taskTitles: List<String>) {
+        if (name.isBlank() || taskTitles.isEmpty()) return
+        viewModelScope.launch {
+            routineDao.updateTemplate(template.copy(name = name, description = description.ifBlank { null }))
+            routineDao.deleteAllTemplateTasks(template.id)
+            val tasks = taskTitles.mapIndexed { index, title ->
+                RoutineTemplateTaskEntity(templateId = template.id, title = title, position = index)
+            }
+            routineDao.insertTemplateTasks(tasks)
+        }
+    }
+
+    /**
+     * Duplicates a template together with its tasks (prompt section 12:
+     * "Duplicate routines"). The copy is a fully independent template with
+     * a new id — editing either one afterwards never affects the other.
+     */
+    fun duplicateTemplate(template: RoutineTemplateEntity) {
+        viewModelScope.launch {
+            val newTemplate = RoutineTemplateEntity(
+                name = "${template.name} (کپی)",
+                description = template.description
+            )
+            routineDao.insertTemplate(newTemplate)
+            val originalTasks = routineDao.getTemplateTasksOnce(template.id)
+            val copiedTasks = originalTasks.map {
+                RoutineTemplateTaskEntity(
+                    templateId = newTemplate.id,
+                    title = it.title,
+                    estimatedDurationMinutes = it.estimatedDurationMinutes,
+                    position = it.position
+                )
+            }
+            routineDao.insertTemplateTasks(copiedTasks)
+        }
+    }
+
+    /**
      * Adds a template to today's plan: creates a RoutineInstance and copies
      * every RoutineTemplateTask into a fresh, independent RoutineInstanceTask.
      */
@@ -151,6 +198,7 @@ fun RoutinesScreen(viewModel: RoutinesViewModel = hiltViewModel()) {
     val templates by viewModel.templates.collectAsState()
     val todaysInstances by viewModel.getTodaysInstances().collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var templateBeingEdited by remember { mutableStateOf<RoutineTemplateEntity?>(null) }
 
     val isLight = !LocalIsDarkTheme.current
     val bgGradient = if (isLight) {
@@ -214,7 +262,9 @@ fun RoutinesScreen(viewModel: RoutinesViewModel = hiltViewModel()) {
                             template = template,
                             viewModel = viewModel,
                             onAddToToday = { viewModel.addTemplateToToday(template) },
-                            onDelete = { viewModel.deleteTemplate(template) }
+                            onDelete = { viewModel.deleteTemplate(template) },
+                            onEdit = { templateBeingEdited = template },
+                            onDuplicate = { viewModel.duplicateTemplate(template) }
                         )
                     }
                 }
@@ -240,6 +290,25 @@ fun RoutinesScreen(viewModel: RoutinesViewModel = hiltViewModel()) {
                 }
             )
         }
+
+        templateBeingEdited?.let { template ->
+            val existingTasks by viewModel.getTemplateTasks(template.id).collectAsState()
+            // Wait for the template's tasks to load before opening the
+            // dialog pre-filled, so the initial task list isn't empty for a
+            // frame and the user doesn't briefly see "no tasks".
+            CreateRoutineDialog(
+                title = "ویرایش روتین",
+                confirmLabel = "ذخیره تغییرات",
+                initialName = template.name,
+                initialDescription = template.description.orEmpty(),
+                initialTaskTitles = existingTasks.map { it.title },
+                onDismiss = { templateBeingEdited = null },
+                onCreate = { name, desc, tasks ->
+                    viewModel.updateTemplate(template, name, desc, tasks)
+                    templateBeingEdited = null
+                }
+            )
+        }
     }
 }
 
@@ -248,9 +317,12 @@ fun RoutineTemplateCard(
     template: RoutineTemplateEntity,
     viewModel: RoutinesViewModel,
     onAddToToday: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    onDuplicate: () -> Unit
 ) {
     val tasks by viewModel.getTemplateTasks(template.id).collectAsState()
+    var showMenu by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
         Column {
@@ -266,8 +338,27 @@ fun RoutineTemplateCard(
                         Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "حذف روتین", tint = AccentRed)
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "گزینه‌های بیشتر", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("ویرایش") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { showMenu = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("کپی کردن") },
+                            leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                            onClick = { showMenu = false; onDuplicate() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("حذف", color = AccentRed) },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = AccentRed) },
+                            onClick = { showMenu = false; onDelete() }
+                        )
+                    }
                 }
             }
             if (tasks.isNotEmpty()) {
@@ -334,16 +425,21 @@ fun RoutineInstanceCard(
 @Composable
 fun CreateRoutineDialog(
     onDismiss: () -> Unit,
-    onCreate: (name: String, description: String, taskTitles: List<String>) -> Unit
+    onCreate: (name: String, description: String, taskTitles: List<String>) -> Unit,
+    title: String = "روتین جدید",
+    confirmLabel: String = "ذخیره روتین",
+    initialName: String = "",
+    initialDescription: String = "",
+    initialTaskTitles: List<String> = emptyList()
 ) {
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
+    var description by remember { mutableStateOf(initialDescription) }
     var newTaskTitle by remember { mutableStateOf("") }
-    val taskTitles = remember { mutableStateListOf<String>() }
+    val taskTitles = remember { mutableStateListOf<String>().apply { addAll(initialTaskTitles) } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("روتین جدید", color = MaterialTheme.colorScheme.onBackground) },
+        title = { Text(title, color = MaterialTheme.colorScheme.onBackground) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column(
@@ -404,7 +500,7 @@ fun CreateRoutineDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                 enabled = name.isNotBlank() && taskTitles.isNotEmpty()
             ) {
-                Text("ذخیره روتین")
+                Text(confirmLabel)
             }
         },
         dismissButton = {

@@ -20,6 +20,12 @@ data class TaskEntity(
     val projectId: String? = null,
     val habitId: String? = null, // links this task to a habit, if it was created from one
     val isCompleted: Boolean = false,
+    // Prompt section 7: "Archive tasks". Archived tasks are hidden from the
+    // normal Today/Tasks/Calendar lists (see TaskDao's isArchived = 0
+    // filters) without being deleted, so their history/analytics rows stay
+    // intact. Independent of isCompleted — a task can be archived whether
+    // or not it was ever finished.
+    val isArchived: Boolean = false,
     // When isCompleted was last set to true. Needed by Analytics (section 19)
     // to detect postponement (completed after its due date) and to find
     // what time of day the user tends to complete tasks. Not touched when

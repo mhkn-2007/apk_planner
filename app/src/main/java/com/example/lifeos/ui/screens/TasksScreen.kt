@@ -19,7 +19,7 @@ import com.example.lifeos.data.database.entities.TaskEntity
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 
-private enum class TaskStatusFilter { ALL, ACTIVE, COMPLETED }
+private enum class TaskStatusFilter { ALL, ACTIVE, COMPLETED, ARCHIVED }
 private enum class TaskSortOrder { DUE_DATE, PRIORITY, CREATED }
 
 /**
@@ -43,13 +43,20 @@ fun TasksScreen(
     }
     val allTasks = allTasksState.value
 
+    val archivedTasksState = remember { mutableStateOf<List<TaskEntity>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        viewModel.observeArchivedTasks().collect { archivedTasksState.value = it }
+    }
+    val archivedTasks = archivedTasksState.value
+
     var query by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf(TaskStatusFilter.ACTIVE) }
     var sortOrder by remember { mutableStateOf(TaskSortOrder.DUE_DATE) }
     var selectedTaskForEdit by remember { mutableStateOf<TaskEntity?>(null) }
 
-    val filtered = remember(allTasks, query, statusFilter, sortOrder) {
-        allTasks
+    val filtered = remember(allTasks, archivedTasks, query, statusFilter, sortOrder) {
+        val source = if (statusFilter == TaskStatusFilter.ARCHIVED) archivedTasks else allTasks
+        source
             .filter { task ->
                 val matchesQuery = query.isBlank() ||
                     task.title.contains(query, ignoreCase = true) ||
@@ -58,6 +65,7 @@ fun TasksScreen(
                     TaskStatusFilter.ALL -> true
                     TaskStatusFilter.ACTIVE -> !task.isCompleted
                     TaskStatusFilter.COMPLETED -> task.isCompleted
+                    TaskStatusFilter.ARCHIVED -> true
                 }
                 matchesQuery && matchesStatus
             }
@@ -124,6 +132,11 @@ fun TasksScreen(
                         onClick = { statusFilter = TaskStatusFilter.ALL },
                         label = { Text("همه") }
                     )
+                    FilterChip(
+                        selected = statusFilter == TaskStatusFilter.ARCHIVED,
+                        onClick = { statusFilter = TaskStatusFilter.ARCHIVED },
+                        label = { Text("آرشیو") }
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -173,7 +186,16 @@ fun TasksScreen(
                             task = task,
                             onToggleComplete = { viewModel.toggleTaskComplete(task) },
                             onDelete = { viewModel.deleteTask(task) },
-                            onClick = { selectedTaskForEdit = task }
+                            onClick = { selectedTaskForEdit = task },
+                            onArchive = {
+                                if (statusFilter == TaskStatusFilter.ARCHIVED) {
+                                    viewModel.unarchiveTask(task)
+                                } else {
+                                    viewModel.archiveTask(task)
+                                }
+                            },
+                            onDuplicate = { viewModel.duplicateTask(task) },
+                            isArchived = statusFilter == TaskStatusFilter.ARCHIVED
                         )
                     }
                     item { Spacer(modifier = Modifier.height(80.dp)) }

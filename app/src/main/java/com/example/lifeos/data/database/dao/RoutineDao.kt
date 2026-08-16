@@ -43,6 +43,14 @@ interface RoutineDao {
     @Delete
     suspend fun deleteTemplateTask(task: RoutineTemplateTaskEntity)
 
+    /**
+     * Clears every task under a template so [RoutinesViewModel.updateTemplate]
+     * can replace the whole ordered list in one edit (prompt section 12:
+     * "Edit routines") rather than diffing individual rows.
+     */
+    @Query("DELETE FROM routine_template_tasks WHERE templateId = :templateId")
+    suspend fun deleteAllTemplateTasks(templateId: String)
+
     @Query("SELECT * FROM routine_template_tasks WHERE templateId = :templateId ORDER BY position ASC")
     fun getTemplateTasks(templateId: String): Flow<List<RoutineTemplateTaskEntity>>
 

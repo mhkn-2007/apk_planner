@@ -13,10 +13,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -127,6 +130,9 @@ class TodayViewModel @Inject constructor(
      * today-only for the Today screen.
      */
     fun observeAllTasks(): Flow<List<TaskEntity>> = taskRepository.getAllTasks()
+
+    /** Archived tasks (prompt section 7) for the Tasks screen's "Archived" filter. */
+    fun observeArchivedTasks(): Flow<List<TaskEntity>> = taskRepository.getArchivedTasks()
 
     private val _planningInsight = MutableStateFlow(PlanningInsight())
     val planningInsight: StateFlow<PlanningInsight> = _planningInsight.asStateFlow()
@@ -359,6 +365,54 @@ class TodayViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Archives a task (prompt section 7: "Archive tasks") — hides it from
+     * every normal list without deleting it, so its reminders/subtasks and
+     * any analytics history stay intact. The task's own alarm is cancelled
+     * since an archived task shouldn't keep notifying the user.
+     */
+    fun archiveTask(task: TaskEntity) {
+        viewModelScope.launch {
+            taskRepository.setArchived(task.id, true)
+            alarmScheduler.cancelAlarm(context, task.id)
+        }
+    }
+
+    fun unarchiveTask(task: TaskEntity) {
+        viewModelScope.launch {
+            taskRepository.setArchived(task.id, false)
+        }
+    }
+
+    /**
+     * Duplicates a task (prompt section 7: "Duplicate tasks"). The copy
+     * gets a new id/creation time and starts uncompleted and unarchived —
+     * everything else (title, description, timing, priority, links to a
+     * goal/project, etc.) carries over. Subtasks/reminders are NOT copied:
+     * the prompt only asks for duplicating the task itself, and silently
+     * cloning reminders would double-schedule alarms the user didn't ask
+     * for.
+     */
+    fun duplicateTask(task: TaskEntity) {
+        viewModelScope.launch {
+            val copy = task.copy(
+                id = java.util.UUID.randomUUID().toString(),
+                isCompleted = false,
+                completedAtMillis = null,
+                isArchived = false,
+                createdAtMillis = System.currentTimeMillis(),
+                // A duplicated task is a new, independent task — it must not
+                // silently join the original's recurrence series.
+                recurrenceRule = null,
+                recurrenceGroupId = null
+            )
+            taskRepository.insertTask(copy)
+            copy.alarmTimeMillis?.let {
+                alarmScheduler.scheduleAlarm(context, copy.id, copy.title, it)
+            }
+        }
+    }
+
     // --- Subtasks ---
 
     fun getSubtasksForTask(taskId: String): StateFlow<List<com.example.lifeos.data.database.entities.SubtaskEntity>> {
@@ -569,7 +623,9 @@ fun TodayScreen(
                             onToggleComplete = { viewModel.toggleTaskComplete(task) },
                             onDelete = { viewModel.deleteTask(task) },
                             onClick = { selectedTaskForEdit = task },
-                            onStartFocus = { onStartFocus(task) }
+                            onStartFocus = { onStartFocus(task) },
+                            onArchive = { viewModel.archiveTask(task) },
+                            onDuplicate = { viewModel.duplicateTask(task) }
                         )
                     }
                 }
@@ -1212,8 +1268,12 @@ fun GlassTaskItem(
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit,
     onClick: () -> Unit,
-    onStartFocus: () -> Unit = {}
+    onStartFocus: () -> Unit = {},
+    onArchive: () -> Unit = {},
+    onDuplicate: () -> Unit = {},
+    isArchived: Boolean = false
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val priorityColor = when (task.priority) {
         1 -> PriorityLow
         2 -> PriorityMedium
@@ -1311,6 +1371,28 @@ fun GlassTaskItem(
                     contentDescription = "حذف",
                     tint = AccentRed.copy(alpha = 0.7f)
                 )
+            }
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "گزینه‌های بیشتر",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    // Prompt section 7: "Duplicate tasks" / "Archive tasks".
+                    DropdownMenuItem(
+                        text = { Text("کپی کردن") },
+                        leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                        onClick = { showMenu = false; onDuplicate() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (isArchived) "بازگردانی از آرشیو" else "آرشیو") },
+                        leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null) },
+                        onClick = { showMenu = false; onArchive() }
+                    )
+                }
             }
         }
     }
