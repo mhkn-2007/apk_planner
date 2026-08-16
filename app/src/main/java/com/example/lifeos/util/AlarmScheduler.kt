@@ -6,6 +6,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoints
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -149,18 +157,55 @@ class AlarmScheduler @Inject constructor() {
 }
 
 class AlarmReceiver : BroadcastReceiver() {
+
+    /**
+     * [AlarmReceiver] is instantiated by the Android framework, not by
+     * Hilt, so it can't take an @Inject constructor. This is the standard
+     * Hilt pattern for reaching a @Singleton from a framework-constructed
+     * class: EntryPoints.get() pulls the exact same app-wide
+     * PreferencesManager instance every other injected class uses, instead
+     * of `PreferencesManager(context)` constructing a second, separate
+     * instance that happens to read the same backing files.
+     */
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface PreferencesManagerEntryPoint {
+        fun preferencesManager(): PreferencesManager
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         val title = intent.getStringExtra("TASK_TITLE") ?: "یادآوری"
         val message = intent.getStringExtra("REMINDER_MESSAGE")
         val reminderId = intent.getStringExtra("REMINDER_ID")
         val taskId = intent.getStringExtra("TASK_ID") ?: return
 
-        NotificationHelper.createNotificationChannel(context)
-        NotificationHelper.showNotification(
-            context,
-            notificationId = (reminderId ?: taskId).hashCode(),
-            title = "یادآوری LifeOS",
-            content = message ?: title
-        )
+        // Respect the user's notification toggle in Settings (prompt section
+        // 45: "Users must be able to control notification preferences").
+        // Without this check the toggle only changed a stored flag that
+        // nothing ever read — exactly the "fake button" prompt section 62
+        // forbids. goAsync() keeps the receiver (and its process) alive long
+        // enough for the one-shot suspend read, since onReceive itself can't
+        // suspend.
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val preferencesManager = EntryPoints.get(
+                    context.applicationContext,
+                    PreferencesManagerEntryPoint::class.java
+                ).preferencesManager()
+                val notificationsEnabled = preferencesManager.isNotificationsEnabled.first()
+                if (notificationsEnabled) {
+                    NotificationHelper.createNotificationChannel(context)
+                    NotificationHelper.showNotification(
+                        context,
+                        notificationId = (reminderId ?: taskId).hashCode(),
+                        title = "یادآوری LifeOS",
+                        content = message ?: title
+                    )
+                }
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 }

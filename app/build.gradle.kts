@@ -91,6 +91,12 @@ dependencies {
     // DataStore Preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
+    // Encrypted storage for secrets like the user's Gemini API key (prompt
+    // section 51: "secure secret management" — plain DataStore is readable
+    // by anyone with device backup/root access, which is not acceptable for
+    // a credential).
+    implementation("androidx.security:security-crypto:1.0.0")
+
     // HTTP client for the real Gemini AI provider (prompt sections 20-41)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Persian Date logic (If external library used, or we implement our own)
