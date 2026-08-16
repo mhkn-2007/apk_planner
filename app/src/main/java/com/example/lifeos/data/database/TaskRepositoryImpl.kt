@@ -51,6 +51,39 @@ class TaskRepositoryImpl @Inject constructor(
         taskDao.setArchived(taskId, archived)
     }
 
+    /**
+     * Creates a new task that copies everything the user would expect a
+     * "duplicate" (prompt section 7) to carry over: title, description,
+     * schedule, priority, links, and its subtasks/reminders. Explicitly NOT
+     * copied: completion state (a duplicate is a fresh, unstarted copy) and
+     * recurrence linkage (a duplicate is its own independent task, not
+     * another occurrence of the original's recurring series).
+     */
+    override suspend fun duplicateTask(task: TaskEntity): TaskEntity {
+        val copy = task.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            isCompleted = false,
+            completedAtMillis = null,
+            isArchived = false,
+            createdAtMillis = System.currentTimeMillis(),
+            recurrenceRule = null,
+            recurrenceGroupId = null
+        )
+        taskDao.insertTask(copy)
+
+        subtaskDao.getSubtasksForTaskOnce(task.id).forEach { subtask ->
+            subtaskDao.insertSubtask(
+                subtask.copy(id = java.util.UUID.randomUUID().toString(), taskId = copy.id, isCompleted = false)
+            )
+        }
+        reminderDao.getRemindersForTaskOnce(task.id).forEach { reminder ->
+            reminderDao.insertReminder(
+                reminder.copy(id = java.util.UUID.randomUUID().toString(), taskId = copy.id)
+            )
+        }
+        return copy
+    }
+
     override suspend fun getExistingOccurrenceDates(groupId: String, startOfDay: Long, endOfDay: Long): List<Long?> {
         return taskDao.getExistingOccurrenceDates(groupId, startOfDay, endOfDay)
     }

@@ -449,21 +449,25 @@ class TodayViewModel @Inject constructor(
      */
     fun duplicateTask(task: TaskEntity) {
         viewModelScope.launch {
-            val copy = task.copy(
-                id = java.util.UUID.randomUUID().toString(),
-                isCompleted = false,
-                completedAtMillis = null,
-                isArchived = false,
-                createdAtMillis = System.currentTimeMillis(),
-                // A duplicated task is a new, independent task — it must not
-                // silently join the original's recurrence series.
-                recurrenceRule = null,
-                recurrenceGroupId = null
-            )
-            taskRepository.insertTask(copy)
+            // taskRepository.duplicateTask also copies subtasks and
+            // reminders (prompt sections 9-10) — a duplicate that silently
+            // dropped them wouldn't be a real copy of the task.
+            val copy = taskRepository.duplicateTask(task)
             copy.alarmTimeMillis?.let {
                 alarmScheduler.scheduleAlarm(context, copy.id, copy.title, it)
             }
+            taskRepository.getRemindersForTask(copy.id).first()
+                .filter { it.isEnabled }
+                .forEach { reminder ->
+                    alarmScheduler.scheduleReminderAlarm(
+                        context = context,
+                        reminderId = reminder.id,
+                        taskId = copy.id,
+                        title = copy.title,
+                        message = reminder.message,
+                        triggerAtMillis = reminder.triggerTimeMillis
+                    )
+                }
         }
     }
 
