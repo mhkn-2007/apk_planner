@@ -140,10 +140,79 @@ class ProjectsViewModel @Inject constructor(
 }
 
 @Composable
-fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
+fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     val goals by viewModel.goals.collectAsState()
-    val projects by viewModel.projects.collectAsState()
     var showAddGoalDialog by remember { mutableStateOf(false) }
+
+    val isLight = !LocalIsDarkTheme.current
+    val bgGradient = if (isLight) {
+        Brush.verticalGradient(colors = listOf(LightGradientStart, LightGradientMiddle, LightGradientEnd))
+    } else {
+        Brush.verticalGradient(colors = listOf(GradientStart, GradientMiddle, GradientEnd))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgGradient)
+    ) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Text(
+                text = "اهداف",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "چیزهایی که می‌خواهید در بلندمدت به آن‌ها برسید",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (goals.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().glassCard().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("هنوز هدفی تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(goals) { goal ->
+                        GoalCard(goal = goal, viewModel = viewModel)
+                    }
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick = { showAddGoalDialog = true },
+            containerColor = AccentAmber,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            shape = CircleShape,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "هدف جدید")
+        }
+
+        if (showAddGoalDialog) {
+            SimpleAddDialog(
+                title = "هدف جدید",
+                nameLabel = "عنوان هدف",
+                onDismiss = { showAddGoalDialog = false },
+                onAdd = { name, desc -> viewModel.addGoal(name, desc); showAddGoalDialog = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
+    val projects by viewModel.projects.collectAsState()
     var showAddProjectDialog by remember { mutableStateOf(false) }
 
     // Dynamic gradient background depending on Light/Dark mode (previously
@@ -166,40 +235,17 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Text(
-                text = "اهداف و پروژه‌ها",
+                text = "پروژه‌ها",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
+            Text(
+                text = "کارهایی که در حال پیش‌بردن آن‌ها هستید",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
             Spacer(modifier = Modifier.height(16.dp))
-
-            // Goals Section
-            Text("اهداف بلندمدت", style = MaterialTheme.typography.titleMedium, color = AccentAmber)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (goals.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().glassCard().padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("هنوز هدفی تعریف نشده", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 260.dp)
-                ) {
-                    items(goals) { goal ->
-                        GoalCard(goal = goal, viewModel = viewModel)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Projects Section
-            Text("پروژه‌های فعال", style = MaterialTheme.typography.titleMedium, color = AccentTeal)
-            Spacer(modifier = Modifier.height(8.dp))
 
             if (projects.isEmpty()) {
                 Box(
@@ -220,36 +266,16 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
             }
         }
 
-        // FABs
-        Column(
-            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        FloatingActionButton(
+            onClick = { showAddProjectDialog = true },
+            containerColor = AccentBlue,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = CircleShape,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp)
         ) {
-            SmallFloatingActionButton(
-                onClick = { showAddGoalDialog = true },
-                containerColor = AccentAmber,
-                contentColor = MaterialTheme.colorScheme.onTertiary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "هدف جدید")
-            }
-            FloatingActionButton(
-                onClick = { showAddProjectDialog = true },
-                containerColor = AccentBlue,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "پروژه جدید")
-            }
+            Icon(Icons.Default.Add, contentDescription = "پروژه جدید")
         }
 
-        if (showAddGoalDialog) {
-            SimpleAddDialog(
-                title = "هدف جدید",
-                nameLabel = "عنوان هدف",
-                onDismiss = { showAddGoalDialog = false },
-                onAdd = { name, desc -> viewModel.addGoal(name, desc); showAddGoalDialog = false }
-            )
-        }
         if (showAddProjectDialog) {
             SimpleAddDialog(
                 title = "پروژه جدید",

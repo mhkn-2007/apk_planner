@@ -118,7 +118,11 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 ### 🟡 ۲.۸ — بخش ۵ (ناوبری اصلی): فقط ۵ از ۱۱ بخش خواسته‌شده وجود داره
 موجود: Today, Calendar, Habits, AI Chat, Settings
 جا افتاده: Tasks (صفحه‌ی مستقل), Goals (مجزا از Projects), Routines, Focus, Analytics
-**وضعیت: فاز بعدی — بعد از پیاده‌سازی هر فیچر، باید به ناوبری اضافه بشه.**
+**وضعیت: فیکس شد (فاز ۹).**
+- `TasksScreen` اضافه شد: برخلاف Today (که فقط تسک‌های امروز رو نشون می‌ده)، همه‌ی تسک‌ها رو با جستجو، فیلتر (فعال/تکمیل‌شده/همه)، و مرتب‌سازی (تاریخ سررسید/اولویت/جدیدترین) نشون می‌ده — دقیقاً چیزی که بخش ۷ خواسته («Search tasks / Filter tasks / Sort tasks»). منطق تکمیل/حذف/ویرایش رو از `TodayViewModel` مشترک استفاده می‌کنه تا با هم‌گام‌سازی streak عادت و زمان‌بندی یادآوری دوباره‌کاری نشه.
+- `ProjectsScreen` قبلی (که Goal و Project رو با هم توی یک صفحه نشون می‌داد) به دو صفحه‌ی کاملاً مستقل `GoalsScreen` و `ProjectsScreen` تقسیم شد (فایل به `GoalsAndProjectsScreen.kt` تغییر نام داد، هرکدوم `ViewModel` مشترک `ProjectsViewModel` رو استفاده می‌کنن ولی UI هرکدوم جداست).
+- با این کار الان هر ۱۱ بخش خواسته‌شده‌ی پرامپت (Today, Calendar, Tasks, Goals, Projects, Habits, Routines, Focus, Analytics, AI Assistant, Settings) یک route مستقل دارن.
+- **تصمیم طراحی مهم:** چیدن هر ۱۱ آیتم مستقیم توی یک `NavigationBar` طبق خودِ همین بخش پرامپت («ناوبری باید ساده بمونه، از عمق زیاد پرهیز شود») نادرسته — با عرض متوسط گوشی عملاً غیرقابل‌لمس دقیق می‌شه. به‌جاش ۴ تب پرکاربرد (Today, Calendar, Tasks, AI Assistant) توی نوار پایین ثابتن، و بقیه (Goals, Projects, Habits, Routines, Focus, Analytics, Settings) پشت یک دکمه‌ی «بیشتر» با یک `ModalBottomSheet` گریدی هستن — یعنی هر بخش همچنان فقط یک لمس فاصله داره، ولی نوار پایین شلوغ نمی‌شه.
 
 ### 🟡 ۲.۹ — بخش ۳۲ (Scheduling Engine): نصفه‌کاره و استفاده نشده
 `DeterministicPlannerEngine` منطق خوبی داره (sort، workload، conflict detection) ولی:
@@ -163,7 +167,7 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 6. ✅ فاز ۶: Analytics — **انجام شد**
 7. ✅ فاز ۷: Goals/Projects Milestones + اتصال کامل زنجیره‌ی Goal→Project→Task — **انجام شد**
 8. ✅ فاز ۸: Recurring Tasks — **انجام شد**
-9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks/Goals/Analytics هنوز صفحه‌ی مستقل تو bottom nav ندارن؛ Focus این نوبت اضافه شد) — **بخشی انجام شد**
+9. ✅ فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks و Goals این نوبت به‌عنوان صفحه‌ی مستقل اضافه شدن؛ نوار پایین به ۴ تب اصلی + شیت «بیشتر» برای ۷ بخش باقی‌مانده بازطراحی شد) — **انجام شد**
 10. ✅ تکمیل جزئی ۲.۱۰ (Data model — `HabitLog`, `FocusSession`) و ۲.۱۱ (حذف کد مرده‌ی `ReminderWorker`) — **انجام شد**
 
-بزرگترین کار باقی‌مانده حالا تکمیل ناوبری به ۱۱ بخش کامل پرامپت (فاز ۹ — فقط Tasks و Goals هنوز صفحه‌ی مستقل تو bottom nav ندارن) و نمودارهای گرافیکی روند در Analytics هست. فازهای ۱ تا ۸ کامل شدن، به‌جز مدیریت کلید API سمت بک‌اند (بخش ۳۷-۳۹) که یک تصمیم معماری جداست.
+بزرگترین کار باقی‌مانده حالا نمودارهای گرافیکی روند در Analytics (بخش ۱۷: progress charts) و مدیریت کلید API سمت بک‌اند (بخش ۳۷-۳۹) هستن. فازهای ۱ تا ۹ کامل شدن.

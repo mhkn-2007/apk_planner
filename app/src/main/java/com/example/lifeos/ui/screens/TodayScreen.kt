@@ -49,6 +49,7 @@ import com.example.lifeos.util.AlarmScheduler
 import com.example.lifeos.util.JalaliCalendarUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -119,6 +120,13 @@ class TodayViewModel @Inject constructor(
     fun linkTaskToProject(task: TaskEntity, projectId: String?) {
         viewModelScope.launch { taskRepository.updateTask(task.copy(projectId = projectId)) }
     }
+
+    /**
+     * All tasks regardless of due date, for the standalone Tasks screen
+     * (prompt section 5/7). Kept separate from [tasks], which stays
+     * today-only for the Today screen.
+     */
+    fun observeAllTasks(): Flow<List<TaskEntity>> = taskRepository.getAllTasks()
 
     private val _planningInsight = MutableStateFlow(PlanningInsight())
     val planningInsight: StateFlow<PlanningInsight> = _planningInsight.asStateFlow()
