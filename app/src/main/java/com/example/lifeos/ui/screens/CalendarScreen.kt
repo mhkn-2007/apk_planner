@@ -1,6 +1,7 @@
 package com.example.lifeos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,11 +9,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lifeos.data.database.entities.TaskEntity
+import com.example.lifeos.domain.planner.DeterministicPlannerEngine
 import com.example.lifeos.domain.repositories.TaskRepository
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
@@ -36,16 +42,44 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val plannerEngine: DeterministicPlannerEngine
 ) : ViewModel() {
 
     private val _selectedDayTasks = MutableStateFlow<List<TaskEntity>>(emptyList())
     val selectedDayTasks: StateFlow<List<TaskEntity>> = _selectedDayTasks.asStateFlow()
+
+    /**
+     * Time-blocked tasks for the selected day (prompt section 14) — those
+     * with both a start and end time — sorted chronologically for the
+     * timeline view. Untimed tasks stay in [selectedDayTasks]'s plain list.
+     */
+    val timeBlockedTasks: StateFlow<List<TaskEntity>> = MutableStateFlow<List<TaskEntity>>(emptyList())
+        .also { flow ->
+            viewModelScope.launch {
+                selectedDayTasks.collect { tasks ->
+                    flow.value = tasks
+                        .filter { it.startTimeMillis != null && it.endTimeMillis != null }
+                        .sortedBy { it.startTimeMillis }
+                }
+            }
+        }.asStateFlow()
+
+    /** Pairs of overlapping time blocks for the selected day (section 14: "must detect overlapping blocks"). */
+    val conflicts: StateFlow<List<Pair<TaskEntity, TaskEntity>>> = MutableStateFlow<List<Pair<TaskEntity, TaskEntity>>>(emptyList())
+        .also { flow ->
+            viewModelScope.launch {
+                timeBlockedTasks.collect { blocked ->
+                    flow.value = plannerEngine.detectConflicts(blocked)
+                }
+            }
+        }.asStateFlow()
 
     fun loadTasksForDate(year: Int, month: Int, day: Int) {
         viewModelScope.launch {
@@ -98,7 +132,12 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
     var selectedDay by remember { mutableIntStateOf(todayJalali.day) }
 
     val selectedDayTasks by viewModel.selectedDayTasks.collectAsState()
+    val timeBlockedTasks by viewModel.timeBlockedTasks.collectAsState()
+    val conflicts by viewModel.conflicts.collectAsState()
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    // Day list vs. Timeline/time-blocking view (prompt section 13: "Timeline
+    // / schedule view", section 14: time blocking with visible overlaps).
+    var showTimeline by remember { mutableStateOf(false) }
 
     // Correctly accounts for Esfand having 29 or 30 days depending on whether
     // the Jalali year is a leap year.
@@ -252,12 +291,22 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.SemiBold
                 )
-                
-                IconButton(
-                    onClick = { showAddTaskDialog = true },
-                    modifier = Modifier.background(AccentBlue.copy(alpha = 0.15f), CircleShape)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "کار جدید برای این روز", tint = AccentBlue)
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // List / Timeline toggle (prompt section 13-14).
+                    IconButton(onClick = { showTimeline = !showTimeline }) {
+                        Icon(
+                            if (showTimeline) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.Schedule,
+                            contentDescription = if (showTimeline) "نمای لیست" else "نمای تایم‌لاین",
+                            tint = AccentTeal
+                        )
+                    }
+                    IconButton(
+                        onClick = { showAddTaskDialog = true },
+                        modifier = Modifier.background(AccentBlue.copy(alpha = 0.15f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "کار جدید برای این روز", tint = AccentBlue)
+                    }
                 }
             }
 
@@ -266,7 +315,13 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
             )
 
-            if (selectedDayTasks.isEmpty()) {
+            if (showTimeline) {
+                DayTimelineView(
+                    tasks = timeBlockedTasks,
+                    conflicts = conflicts,
+                    modifier = Modifier.weight(1f)
+                )
+            } else if (selectedDayTasks.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(32.dp),
                     contentAlignment = Alignment.Center
@@ -289,7 +344,16 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                                 .glassCard(cornerRadius = 12.dp)
                                 .padding(12.dp)
                         ) {
-                            Text(text = task.title, color = MaterialTheme.colorScheme.onBackground)
+                            Column {
+                                Text(text = task.title, color = MaterialTheme.colorScheme.onBackground)
+                                if (task.startTimeMillis != null && task.endTimeMillis != null) {
+                                    Text(
+                                        text = formatTimeRange(task.startTimeMillis!!, task.endTimeMillis!!),
+                                        color = AccentTeal,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -347,4 +411,134 @@ fun SimpleAddTaskForDateDialog(onDismiss: () -> Unit, onAdd: (String, String, In
             TextButton(onClick = onDismiss) { Text("انصراف") }
         }
     )
+}
+
+private fun formatTimeRange(startMillis: Long, endMillis: Long): String {
+    val startCal = Calendar.getInstance().apply { timeInMillis = startMillis }
+    val endCal = Calendar.getInstance().apply { timeInMillis = endMillis }
+    return String.format(
+        "%02d:%02d–%02d:%02d",
+        startCal.get(Calendar.HOUR_OF_DAY), startCal.get(Calendar.MINUTE),
+        endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE)
+    )
+}
+
+/**
+ * Time-blocking timeline (prompt section 13: "Timeline / schedule view",
+ * section 14: "Time blocks must be visually clear. The system must detect
+ * overlapping blocks."). Renders every time-blocked task for the day as a
+ * proportionally-sized, proportionally-positioned block along a fixed
+ * 06:00-24:00 hour axis, with conflicting blocks (from
+ * [CalendarViewModel.conflicts], backed by
+ * [com.example.lifeos.domain.planner.DeterministicPlannerEngine.detectConflicts])
+ * outlined in red so overlaps are immediately visible rather than only
+ * discoverable by reading times.
+ */
+@Composable
+private fun DayTimelineView(
+    tasks: List<TaskEntity>,
+    conflicts: List<Pair<TaskEntity, TaskEntity>>,
+    modifier: Modifier = Modifier
+) {
+    val startHour = 6
+    val endHour = 24
+    val hourHeight = 64.dp
+    val totalHeight = hourHeight * (endHour - startHour)
+    val conflictingIds = remember(conflicts) {
+        conflicts.flatMap { (a, b) -> listOf(a.id, b.id) }.toSet()
+    }
+
+    if (tasks.isEmpty()) {
+        Box(modifier = modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+            Text(
+                text = "هیچ کار زمان‌بندی‌شده‌ای (با ساعت شروع و مدت‌زمان) برای این روز نیست",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+        }
+        return
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+            // Hour grid lines + labels.
+            for (hour in startHour..endHour) {
+                val y = hourHeight * (hour - startHour)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = y),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = String.format("%02d:00", hour % 24),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.width(44.dp)
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f)
+                    )
+                }
+            }
+
+            // Task blocks, positioned/sized by their start/end time.
+            tasks.forEach { task ->
+                val startCal = Calendar.getInstance().apply { timeInMillis = task.startTimeMillis!! }
+                val endCal = Calendar.getInstance().apply { timeInMillis = task.endTimeMillis!! }
+                val startFractionalHour = (startCal.get(Calendar.HOUR_OF_DAY) - startHour) +
+                    startCal.get(Calendar.MINUTE) / 60f
+                val durationHours = ((task.endTimeMillis!! - task.startTimeMillis!!).coerceAtLeast(60_000L)) / 3_600_000f
+
+                val hasConflict = task.id in conflictingIds
+                val priorityColor = when (task.priority) {
+                    1 -> PriorityLow
+                    2 -> PriorityMedium
+                    3 -> PriorityHigh
+                    4 -> PriorityCritical
+                    else -> AccentBlue
+                }
+
+                Box(
+                    modifier = Modifier
+                        .padding(start = 52.dp, end = 8.dp)
+                        .offset(y = hourHeight * startFractionalHour)
+                        .fillMaxWidth()
+                        .height((hourHeight * durationHours).coerceAtLeast(28.dp))
+                        .background(
+                            priorityColor.copy(alpha = if (hasConflict) 0.35f else 0.22f),
+                            RoundedCornerShape(10.dp)
+                        )
+                        .then(
+                            if (hasConflict) {
+                                Modifier.border(1.5.dp, AccentRed, RoundedCornerShape(10.dp))
+                            } else Modifier
+                        )
+                        .padding(8.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = task.title,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = formatTimeRange(task.startTimeMillis!!, task.endTimeMillis!!) +
+                                if (hasConflict) " • تداخل زمانی" else "",
+                            color = if (hasConflict) AccentRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

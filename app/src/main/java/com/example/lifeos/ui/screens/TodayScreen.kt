@@ -166,7 +166,8 @@ class TodayViewModel @Inject constructor(
         timeOfDay: String? = null,
         customHour: Int? = null,
         customMinute: Int? = null,
-        recurrenceRule: RecurrenceRule? = null
+        recurrenceRule: RecurrenceRule? = null,
+        estimatedDurationMinutes: Int? = null
     ) {
         if (title.isBlank()) return
         viewModelScope.launch {
@@ -207,6 +208,16 @@ class TodayViewModel @Inject constructor(
                 }
             }
 
+            // Time blocking (prompt section 14): a task with both a
+            // scheduled time and an estimated duration becomes a concrete
+            // time block (start -> start+duration), not just a reminder
+            // instant. This is what CalendarScreen's timeline view and
+            // DeterministicPlannerEngine.detectConflicts actually key off.
+            val validDuration = estimatedDurationMinutes?.takeIf { it > 0 }
+            val computedEndTime = if (alarmTime != null && validDuration != null) {
+                alarmTime + validDuration * 60_000L
+            } else null
+
             val recurrenceGroupId = if (recurrenceRule != null) UUID.randomUUID().toString() else null
             val task = TaskEntity(
                 id = UUID.randomUUID().toString(),
@@ -216,6 +227,9 @@ class TodayViewModel @Inject constructor(
                 dueDateMillis = System.currentTimeMillis(),
                 timeOfDay = timeOfDay,
                 alarmTimeMillis = alarmTime,
+                startTimeMillis = if (alarmTime != null && validDuration != null) alarmTime else null,
+                endTimeMillis = computedEndTime,
+                estimatedDurationMinutes = validDuration,
                 recurrenceRule = recurrenceRule?.encode(),
                 recurrenceGroupId = recurrenceGroupId
             )
@@ -251,7 +265,7 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    fun updateTask(task: TaskEntity, newTitle: String, newDesc: String, newPriority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null) {
+    fun updateTask(task: TaskEntity, newTitle: String, newDesc: String, newPriority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null, estimatedDurationMinutes: Int? = null) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             var alarmTime: Long? = null
@@ -286,12 +300,23 @@ class TodayViewModel @Inject constructor(
                 }
             }
 
+            // Same time-blocking derivation as addTask (prompt section 14):
+            // an explicit scheduled time + duration together define the
+            // block's start/end, not just an alarm instant.
+            val validDuration = estimatedDurationMinutes?.takeIf { it > 0 }
+            val computedEndTime = if (alarmTime != null && validDuration != null) {
+                alarmTime + validDuration * 60_000L
+            } else null
+
             val updated = task.copy(
                 title = newTitle,
                 description = newDesc.ifBlank { null },
                 priority = newPriority,
                 timeOfDay = timeOfDay,
-                alarmTimeMillis = alarmTime
+                alarmTimeMillis = alarmTime,
+                startTimeMillis = if (alarmTime != null && validDuration != null) alarmTime else null,
+                endTimeMillis = computedEndTime,
+                estimatedDurationMinutes = validDuration ?: task.estimatedDurationMinutes
             )
             taskRepository.updateTask(updated)
 
@@ -648,8 +673,8 @@ fun TodayScreen(
         if (showAddDialog) {
             AddTaskDialog(
                 onDismiss = { showAddDialog = false },
-                onAdd = { title, desc, priority, timeOfDay, hour, min, recurrenceRule ->
-                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min, recurrenceRule)
+                onAdd = { title, desc, priority, timeOfDay, hour, min, recurrenceRule, durationMinutes ->
+                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min, recurrenceRule, durationMinutes)
                     showAddDialog = false
                 }
             )
@@ -682,8 +707,8 @@ fun TodayScreen(
                 task = selectedTaskForEdit!!,
                 viewModel = viewModel,
                 onDismiss = { selectedTaskForEdit = null },
-                onUpdate = { title, desc, priority, timeOfDay, hour, min ->
-                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min)
+                onUpdate = { title, desc, priority, timeOfDay, hour, min, durationMinutes ->
+                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min, durationMinutes)
                     selectedTaskForEdit = null
                 }
             )
@@ -864,7 +889,7 @@ fun ConfigureHabitDialog(
 @Composable
 fun AddTaskDialog(
     onDismiss: () -> Unit,
-    onAdd: (String, String, Int, String?, Int?, Int?, RecurrenceRule?) -> Unit
+    onAdd: (String, String, Int, String?, Int?, Int?, RecurrenceRule?, Int?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -872,6 +897,7 @@ fun AddTaskDialog(
     var timeOfDay by remember { mutableStateOf<String?>(null) }
     var customHour by remember { mutableStateOf<Int?>(null) }
     var customMinute by remember { mutableStateOf<Int?>(null) }
+    var durationText by remember { mutableStateOf("") }
     var recurrenceOption by remember { mutableStateOf("NONE") } // NONE, DAILY, WEEKLY, MONTHLY
     val selectedWeekdays = remember { mutableStateListOf<Int>() }
     val context = LocalContext.current
@@ -945,6 +971,21 @@ fun AddTaskDialog(
                     Text(timeText, color = AccentBlue)
                 }
 
+                // Time blocking (prompt section 14): only meaningful once a
+                // specific time is set above — a duration with no start
+                // time isn't a time block, just a task with a duration
+                // estimate the planner already knows how to use.
+                if (timeOfDay != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = durationText,
+                        onValueChange = { durationText = it.filter { c -> c.isDigit() } },
+                        label = { Text("مدت زمان (دقیقه) — برای نمایش در تایم‌لاین") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("تکرار:", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -985,7 +1026,7 @@ fun AddTaskDialog(
                         "MONTHLY" -> RecurrenceRule.Monthly
                         else -> null
                     }
-                    onAdd(title, description, priority, timeOfDay, customHour, customMinute, rule)
+                    onAdd(title, description, priority, timeOfDay, customHour, customMinute, rule, durationText.toIntOrNull())
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
@@ -1006,12 +1047,13 @@ fun EditTaskDialog(
     task: TaskEntity,
     viewModel: TodayViewModel,
     onDismiss: () -> Unit,
-    onUpdate: (String, String, Int, String?, Int?, Int?) -> Unit
+    onUpdate: (String, String, Int, String?, Int?, Int?, Int?) -> Unit
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
     var priority by remember { mutableIntStateOf(task.priority) }
     var timeOfDay by remember { mutableStateOf(task.timeOfDay) }
+    var durationText by remember { mutableStateOf(task.estimatedDurationMinutes?.toString() ?: "") }
 
     // Parse custom hour/min if available from existing alarmTimeMillis
     var customHour by remember {
@@ -1108,6 +1150,19 @@ fun EditTaskDialog(
                         "تغییر ساعت نوتیفیکیشن"
                     }
                     Text(timeText, color = AccentBlue)
+                }
+
+                // Time blocking (prompt section 14) — same rule as
+                // AddTaskDialog: only shown once a specific time exists.
+                if (timeOfDay != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = durationText,
+                        onValueChange = { durationText = it.filter { c -> c.isDigit() } },
+                        label = { Text("مدت زمان (دقیقه) — برای نمایش در تایم‌لاین") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -1250,7 +1305,7 @@ fun EditTaskDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onUpdate(title, description, priority, timeOfDay, customHour, customMinute) },
+                onClick = { onUpdate(title, description, priority, timeOfDay, customHour, customMinute, durationText.toIntOrNull()) },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
                 Text("بروزرسانی")
