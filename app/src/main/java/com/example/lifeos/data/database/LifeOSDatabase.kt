@@ -49,7 +49,7 @@ import com.example.lifeos.data.database.entities.TaskEntity
         AIConversationEntity::class,
         AIMessageEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {

@@ -20,6 +20,11 @@ data class TaskEntity(
     val projectId: String? = null,
     val habitId: String? = null, // links this task to a habit, if it was created from one
     val isCompleted: Boolean = false,
+    // When isCompleted was last set to true. Needed by Analytics (section 19)
+    // to detect postponement (completed after its due date) and to find
+    // what time of day the user tends to complete tasks. Not touched when
+    // uncompleting a task, so re-completing shows the latest completion time.
+    val completedAtMillis: Long? = null,
     val timeOfDay: String? = null, // MORNING, AFTERNOON, NIGHT, CUSTOM
     val alarmTimeMillis: Long? = null, // specific scheduled alarm time
     val createdAtMillis: Long = System.currentTimeMillis(),

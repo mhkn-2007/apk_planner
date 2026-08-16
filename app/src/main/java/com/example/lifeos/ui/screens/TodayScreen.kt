@@ -292,7 +292,12 @@ class TodayViewModel @Inject constructor(
     fun toggleTaskComplete(task: TaskEntity) {
         viewModelScope.launch {
             val newCompletedState = !task.isCompleted
-            taskRepository.updateTask(task.copy(isCompleted = newCompletedState))
+            taskRepository.updateTask(
+                task.copy(
+                    isCompleted = newCompletedState,
+                    completedAtMillis = if (newCompletedState) System.currentTimeMillis() else task.completedAtMillis
+                )
+            )
 
             val habitId = task.habitId
             if (habitId != null) {

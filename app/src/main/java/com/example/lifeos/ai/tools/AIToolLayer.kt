@@ -97,7 +97,7 @@ class AIToolLayer @Inject constructor(
 
     suspend fun completeTask(taskId: String): ToolResult {
         val task = taskRepository.getTaskById(taskId) ?: return ToolResult.Failure("کاری با این شناسه پیدا نشد.")
-        taskRepository.updateTask(task.copy(isCompleted = true))
+        taskRepository.updateTask(task.copy(isCompleted = true, completedAtMillis = System.currentTimeMillis()))
         return ToolResult.Success("کار «${task.title}» تکمیل شد.")
     }
 

@@ -19,6 +19,12 @@ interface TaskRepository {
     fun getTasksForRecurrenceGroup(groupId: String): Flow<List<TaskEntity>>
     suspend fun deleteFutureUncompletedOccurrences(groupId: String, fromMillis: Long)
 
+    // Analytics (prompt section 19)
+    suspend fun countCompletedInRange(startMillis: Long, endMillis: Long): Int
+    suspend fun countScheduledInRange(startMillis: Long, endMillis: Long): Int
+    suspend fun countPostponedInRange(startMillis: Long, endMillis: Long): Int
+    suspend fun getCompletionTimestampsInRange(startMillis: Long, endMillis: Long): List<Long?>
+
     // Subtasks
     fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>>
     suspend fun insertSubtask(subtask: SubtaskEntity)

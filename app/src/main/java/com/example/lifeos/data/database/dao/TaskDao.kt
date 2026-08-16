@@ -49,4 +49,26 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks WHERE recurrenceGroupId = :groupId AND isCompleted = 0 AND dueDateMillis > :fromMillis")
     suspend fun deleteFutureUncompletedOccurrences(groupId: String, fromMillis: Long)
+
+    // --- Analytics (prompt section 19) ---
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE isCompleted = 1 AND completedAtMillis BETWEEN :startMillis AND :endMillis")
+    suspend fun countCompletedInRange(startMillis: Long, endMillis: Long): Int
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE dueDateMillis BETWEEN :startMillis AND :endMillis")
+    suspend fun countScheduledInRange(startMillis: Long, endMillis: Long): Int
+
+    /**
+     * Tasks originally due within the range but either still not completed,
+     * or completed on a later day than they were due — i.e. postponed.
+     * Used for the "you often postpone tasks" style insight (section 19).
+     */
+    @Query(
+        "SELECT COUNT(*) FROM tasks WHERE dueDateMillis BETWEEN :startMillis AND :endMillis " +
+        "AND (isCompleted = 0 OR completedAtMillis > :endMillis)"
+    )
+    suspend fun countPostponedInRange(startMillis: Long, endMillis: Long): Int
+
+    @Query("SELECT completedAtMillis FROM tasks WHERE isCompleted = 1 AND completedAtMillis BETWEEN :startMillis AND :endMillis")
+    suspend fun getCompletionTimestampsInRange(startMillis: Long, endMillis: Long): List<Long?>
 }

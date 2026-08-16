@@ -55,6 +55,22 @@ class TaskRepositoryImpl @Inject constructor(
         taskDao.deleteFutureUncompletedOccurrences(groupId, fromMillis)
     }
 
+    override suspend fun countCompletedInRange(startMillis: Long, endMillis: Long): Int {
+        return taskDao.countCompletedInRange(startMillis, endMillis)
+    }
+
+    override suspend fun countScheduledInRange(startMillis: Long, endMillis: Long): Int {
+        return taskDao.countScheduledInRange(startMillis, endMillis)
+    }
+
+    override suspend fun countPostponedInRange(startMillis: Long, endMillis: Long): Int {
+        return taskDao.countPostponedInRange(startMillis, endMillis)
+    }
+
+    override suspend fun getCompletionTimestampsInRange(startMillis: Long, endMillis: Long): List<Long?> {
+        return taskDao.getCompletionTimestampsInRange(startMillis, endMillis)
+    }
+
     override fun getSubtasksForTask(taskId: String): Flow<List<SubtaskEntity>> {
         return subtaskDao.getSubtasksForTask(taskId)
     }
