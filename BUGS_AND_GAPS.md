@@ -98,7 +98,13 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 
 ### 🔴 ۲.۵ — بخش ۱۹ (Analytics): اصلاً وجود نداره
 هیچ داشبورد آماری، هیچ `AnalyticsEvent` entity.
-**وضعیت: فاز بعدی.**
+**وضعیت: فیکس شد (فاز ۶).**
+- `AnalyticsViewModel`/`AnalyticsScreen` اضافه شد: داشبورد هفتگی/ماهانه که از داده‌ی موجود (بدون نیاز به یک `AnalyticsEvent` جدا) محاسبه می‌شه — تسک‌های تکمیل/زمان‌بندی‌شده/به‌تعویق‌افتاده و درصد تکمیل (`TaskDao` کوئری‌های جدید)، زمان فوکوس و تعداد جلسات کامل (`FocusSessionDao`)، ثبات هر عادت در بازه (`HabitLogDao`)، پیشرفت هر هدف (`GoalDao`)، و درصد تکمیل روتین‌های آن بازه (`RoutineDao`).
+- `TaskEntity.completedAtMillis` اضافه شد (قبلاً فقط یک boolean `isCompleted` بود، پس نه «چه زمانی تکمیل شد» و نه «به‌تعویق افتاد یا نه» قابل محاسبه نبود).
+- بینش نمونه‌ی خودِ پرامپت («بیشتر کارها بین ساعت X تا Y تکمیل می‌شن») با bucket‌کردن ساعت تکمیل تسک‌ها پیاده شد؛ فقط وقتی داده‌ی کافی (۵+ تکمیل) باشه نشون داده می‌شه تا ادعای گمراه‌کننده نسازه. یک بینش «به‌تعویق‌انداختن مکرر» هم برای وقتی بیش از یک‌سوم تسک‌های زمان‌بندی‌شده به‌تعویق افتادن نشون داده می‌شه.
+- محدوده‌ی هفته/ماه با تقویم جلالی محاسبه می‌شه (هفته از شنبه شروع)، هماهنگ با بقیه‌ی اپ که Persian-first هست.
+- به bottom nav و NavHost وصل شد (بخشی از بخش ۲.۸ رو هم حل می‌کنه).
+- **هنوز پیاده نشده:** نمودارهای گرافیکی روند (progress charts، بخش ۱۷) — فعلاً فقط عدد و نوار پیشرفت خطی نمایش داده می‌شه، نه نمودار خط/میله‌ی زمانی؛ و `AnalyticsEvent` به‌عنوان یک entity جدا برای رویدادهای خام (فعلاً همه‌چیز on-the-fly از جداول موجود محاسبه می‌شه که برای حجم فعلی داده کافیه، ولی برای تاریخچه‌ی طولانی‌مدت‌تر ممکنه یک جدول تجمیعی جدا بهینه‌تر باشه).
 
 ### 🟠 ۲.۶ — بخش ۱۵-۱۶ (Goals/Projects): ناقصه
 - هیچ Milestone (`GoalMilestone`, `ProjectMilestone`) پیاده نشده.
@@ -126,8 +132,8 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 - `RoutineTemplateTask`, `RoutineInstanceTask`, `GoalMilestone`, `ProjectMilestone` قبلاً در فاز‌های Routines/Milestones اضافه شده بودن.
 - `HabitLogEntity` + `HabitLogDao` این نوبت اضافه شد (تاریخچه‌ی روزانه‌ی تکمیل هر عادت، هم از چک‌این دستی در `HabitsScreen` و هم از تکمیل تسک‌های وصل‌شده به عادت در `TodayScreen`) — پایه‌ی داده‌ای لازم برای آمار هفتگی/ماهانه‌ی بخش ۱۷.
 - `UserPreference` عمداً به‌صورت Entity جدا اضافه نشد چون همین الان با `PreferencesManager`/DataStore پیاده‌سازی شده (معماری درست‌تر از یک جدول Room برای key-value ساده).
-- `CalendarEvent`, `FocusSession`, `AIConversation`, `AIMessage`, `AIAction`, `AnalyticsEvent` هنوز جا افتاده‌ن چون به فیچرهای پیاده‌نشده‌ی خودشون وابسته‌ن (Focus Mode = فاز ۵، Analytics = فاز ۶، AI Tool Layer = فاز ۴)؛ ساختن Entity بدون اون فیچرها طبق اصل «no fake functionality» بی‌فایده‌ست.
-  - بخش `FocusSession` این نوبت با فاز ۵ اضافه شد؛ `CalendarEvent`, `AIConversation`, `AIMessage`, `AIAction`, `AnalyticsEvent` هنوز جا افتاده‌ن.
+- `CalendarEvent`, `AIConversation`, `AIMessage`, `AIAction` هنوز جا افتاده‌ن (`AIConversation`/`AIMessage` در فاز ۴ اضافه شدن — این خط قدیمیه، پایین‌تر تصحیح شده). `AnalyticsEvent` عمداً اضافه نشد چون در فاز ۶ آمار مستقیم از جداول موجود (`tasks`, `focus_sessions`, `habit_logs`, `goals`, `routine_instances`) محاسبه می‌شه؛ یک جدول رویداد خام جدا فعلاً بدون مصرف‌کننده، کد مرده می‌بود.
+  - بخش `FocusSession` با فاز ۵ اضافه شد؛ `AIConversation`/`AIMessage` با فاز ۴ اضافه شدن. `CalendarEvent`, `AIAction` هنوز جا افتاده‌ن.
 - `Category`/`Tag` عمداً اضافه نشدن: در هیچ صفحه‌ای استفاده نمی‌شن، پس یک Entity/DAO بی‌UI فقط کد مرده‌ی جدید می‌سازه؛ باید همراه با UI فیلتر/دسته‌بندی تسک به‌عنوان یک فیچر مجزا کار بشه.
 - `User` نیازمند تصمیم معماری احراز هویت (local-only vs backend) هست، در بخش ۵۱ پرامپت هم به‌عنوان «authentication-ready» (نه لزوماً پیاده‌شده) خواسته شده؛ فاز بعدی.
 
@@ -154,10 +160,10 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 3. ✅ فاز ۳: پیاده‌سازی Routines (Template/Instance) با UI کامل — **انجام شد**
 4. ✅ فاز ۴: پیاده‌سازی AI Tool Layer واقعی + Read/Action Tools + اتصال به یک Provider واقعی (Gemini، با کلید وارد‌شده توسط کاربر در Settings) — **انجام شد**
 5. ✅ فاز ۵: Focus Mode — **انجام شد**
-6. فاز ۶: Analytics — **هنوز مونده (پایه‌ی `HabitLog` برای آمار عادت‌ها آماده شد)**
+6. ✅ فاز ۶: Analytics — **انجام شد**
 7. ✅ فاز ۷: Goals/Projects Milestones + اتصال کامل زنجیره‌ی Goal→Project→Task — **انجام شد**
 8. ✅ فاز ۸: Recurring Tasks — **انجام شد**
 9. فاز ۹: تکمیل ناوبری به ۱۱ بخش کامل پرامپت (Tasks/Goals/Analytics هنوز صفحه‌ی مستقل تو bottom nav ندارن؛ Focus این نوبت اضافه شد) — **بخشی انجام شد**
 10. ✅ تکمیل جزئی ۲.۱۰ (Data model — `HabitLog`, `FocusSession`) و ۲.۱۱ (حذف کد مرده‌ی `ReminderWorker`) — **انجام شد**
 
-بزرگترین کار باقی‌مانده حالا فاز ۶ (Analytics) و تکمیل ناوبری به ۱۱ بخش کامل پرامپت (فاز ۹) هستن. فاز ۴ (سیستم AI) کامل شده، به‌جز مدیریت کلید API سمت بک‌اند که یک تصمیم معماری جداست.
+بزرگترین کار باقی‌مانده حالا تکمیل ناوبری به ۱۱ بخش کامل پرامپت (فاز ۹ — فقط Tasks و Goals هنوز صفحه‌ی مستقل تو bottom nav ندارن) و نمودارهای گرافیکی روند در Analytics هست. فازهای ۱ تا ۸ کامل شدن، به‌جز مدیریت کلید API سمت بک‌اند (بخش ۳۷-۳۹) که یک تصمیم معماری جداست.
