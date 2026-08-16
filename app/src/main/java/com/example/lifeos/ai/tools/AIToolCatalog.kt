@@ -1,5 +1,7 @@
 package com.example.lifeos.ai.tools
 
+import com.example.lifeos.data.database.dao.AIActionDao
+import com.example.lifeos.data.database.entities.AIActionEntity
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -15,7 +17,8 @@ import javax.inject.Singleton
 @Singleton
 class AIToolCatalog @Inject constructor(
     private val readTools: AIReadTools,
-    private val actionTools: AIToolLayer
+    private val actionTools: AIToolLayer,
+    private val aiActionDao: AIActionDao
 ) {
     /** One result of dispatching a model function-call. */
     data class DispatchResult(
@@ -279,9 +282,13 @@ class AIToolCatalog @Inject constructor(
         }
     }
 
-    suspend fun applyConfirmation(confirmation: PendingConfirmation): AIToolLayer.ToolResult = when (confirmation.kind) {
-        PendingConfirmation.Kind.DELETE_TASKS -> actionTools.confirmDeleteTasks(confirmation.taskIds)
-        PendingConfirmation.Kind.MOVE_TASKS -> actionTools.confirmMoveTasks(confirmation.taskIds, confirmation.newDueDateMillis ?: System.currentTimeMillis())
+    suspend fun applyConfirmation(confirmation: PendingConfirmation): AIToolLayer.ToolResult {
+        val result = when (confirmation.kind) {
+            PendingConfirmation.Kind.DELETE_TASKS -> actionTools.confirmDeleteTasks(confirmation.taskIds)
+            PendingConfirmation.Kind.MOVE_TASKS -> actionTools.confirmMoveTasks(confirmation.taskIds, confirmation.newDueDateMillis ?: System.currentTimeMillis())
+        }
+        logAction(toolName = "confirm_${confirmation.kind.name.lowercase()}", result = result)
+        return result
     }
 
     private fun ok(name: String, data: Any): DispatchResult =
@@ -293,20 +300,44 @@ class AIToolCatalog @Inject constructor(
      * [applyConfirmation] which follow-up action to run once the user
      * approves. Defaults to DELETE_TASKS for backward compatibility with
      * callers that only ever produce delete-confirmations.
+     *
+     * Every call through here is, by construction, an action tool (not a
+     * `get_*` read) — so this is also the single chokepoint where we write
+     * an [AIActionEntity] audit row (prompt section 44), regardless of
+     * which of the dozen action methods on [AIToolLayer] produced [result].
      */
-    private fun fromToolResult(
+    private suspend fun fromToolResult(
         name: String,
         result: AIToolLayer.ToolResult,
         kind: PendingConfirmation.Kind = PendingConfirmation.Kind.DELETE_TASKS,
         newDueDateMillis: Long? = null
-    ): DispatchResult = when (result) {
-        is AIToolLayer.ToolResult.Success -> DispatchResult(name, JSONObject().put("status", "ok").put("message", result.message))
-        is AIToolLayer.ToolResult.Failure -> DispatchResult(name, JSONObject().put("status", "error").put("message", result.reason))
-        is AIToolLayer.ToolResult.RequiresConfirmation -> DispatchResult(
-            functionName = name,
-            responseJson = JSONObject().put("status", "awaiting_confirmation").put("description", result.description),
-            requiresConfirmation = true,
-            pendingConfirmation = PendingConfirmation(result.description, kind, result.affectedTaskIds, newDueDateMillis)
+    ): DispatchResult {
+        logAction(name, result)
+        return when (result) {
+            is AIToolLayer.ToolResult.Success -> DispatchResult(name, JSONObject().put("status", "ok").put("message", result.message))
+            is AIToolLayer.ToolResult.Failure -> DispatchResult(name, JSONObject().put("status", "error").put("message", result.reason))
+            is AIToolLayer.ToolResult.RequiresConfirmation -> DispatchResult(
+                functionName = name,
+                responseJson = JSONObject().put("status", "awaiting_confirmation").put("description", result.description),
+                requiresConfirmation = true,
+                pendingConfirmation = PendingConfirmation(result.description, kind, result.affectedTaskIds, newDueDateMillis)
+            )
+        }
+    }
+
+    private suspend fun logAction(toolName: String, result: AIToolLayer.ToolResult) {
+        val summary = when (result) {
+            is AIToolLayer.ToolResult.Success -> result.message
+            is AIToolLayer.ToolResult.Failure -> result.reason
+            is AIToolLayer.ToolResult.RequiresConfirmation -> result.description
+        }
+        aiActionDao.insertAction(
+            AIActionEntity(
+                toolName = toolName,
+                summary = summary,
+                wasSuccessful = result is AIToolLayer.ToolResult.Success,
+                requiredConfirmation = result is AIToolLayer.ToolResult.RequiresConfirmation
+            )
         )
     }
 }

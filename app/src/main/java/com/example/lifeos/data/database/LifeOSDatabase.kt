@@ -2,7 +2,9 @@ package com.example.lifeos.data.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.example.lifeos.data.database.dao.AIActionDao
 import com.example.lifeos.data.database.dao.AIConversationDao
+import com.example.lifeos.data.database.dao.CalendarEventDao
 import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
@@ -13,8 +15,10 @@ import com.example.lifeos.data.database.dao.ReminderDao
 import com.example.lifeos.data.database.dao.RoutineDao
 import com.example.lifeos.data.database.dao.SubtaskDao
 import com.example.lifeos.data.database.dao.TaskDao
+import com.example.lifeos.data.database.entities.AIActionEntity
 import com.example.lifeos.data.database.entities.AIConversationEntity
 import com.example.lifeos.data.database.entities.AIMessageEntity
+import com.example.lifeos.data.database.entities.CalendarEventEntity
 import com.example.lifeos.data.database.entities.FocusSessionEntity
 import com.example.lifeos.data.database.entities.GoalEntity
 import com.example.lifeos.data.database.entities.GoalMilestoneEntity
@@ -47,9 +51,11 @@ import com.example.lifeos.data.database.entities.TaskEntity
         ProjectMilestoneEntity::class,
         FocusSessionEntity::class,
         AIConversationEntity::class,
-        AIMessageEntity::class
+        AIMessageEntity::class,
+        AIActionEntity::class,
+        CalendarEventEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class LifeOSDatabase : RoomDatabase() {
@@ -64,4 +70,6 @@ abstract class LifeOSDatabase : RoomDatabase() {
     abstract fun milestoneDao(): MilestoneDao
     abstract fun focusSessionDao(): FocusSessionDao
     abstract fun aiConversationDao(): AIConversationDao
+    abstract fun aiActionDao(): AIActionDao
+    abstract fun calendarEventDao(): CalendarEventDao
 }

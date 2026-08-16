@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.room.Room
 import com.example.lifeos.data.database.LifeOSDatabase
 import com.example.lifeos.data.database.TaskRepositoryImpl
+import com.example.lifeos.data.database.dao.AIActionDao
 import com.example.lifeos.data.database.dao.AIConversationDao
+import com.example.lifeos.data.database.dao.CalendarEventDao
 import com.example.lifeos.data.database.dao.FocusSessionDao
 import com.example.lifeos.data.database.dao.GoalDao
 import com.example.lifeos.data.database.dao.HabitDao
@@ -90,6 +92,16 @@ object DatabaseModule {
     @Provides
     fun provideAIConversationDao(database: LifeOSDatabase): AIConversationDao {
         return database.aiConversationDao()
+    }
+
+    @Provides
+    fun provideAIActionDao(database: LifeOSDatabase): AIActionDao {
+        return database.aiActionDao()
+    }
+
+    @Provides
+    fun provideCalendarEventDao(database: LifeOSDatabase): CalendarEventDao {
+        return database.calendarEventDao()
     }
 
     @Provides

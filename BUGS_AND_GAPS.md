@@ -132,12 +132,13 @@ Entity های `RoutineTemplateEntity` و `RoutineInstanceEntity` در دیتاب
 
 ### 🟡 ۲.۱۰ — بخش ۴۴ (Data Model): خیلی از Entity‌ها وجود ندارن
 جا افتاده بود: `User`, `Category`, `Tag`, `RoutineTemplateTask`, `RoutineInstanceTask`, `GoalMilestone`, `ProjectMilestone`, `HabitLog`, `CalendarEvent`, `FocusSession`, `AIConversation`, `AIMessage`, `AIAction`, `UserPreference` (جدا از DataStore فعلی), `AnalyticsEvent`.
-**وضعیت: بخشی فیکس شد.**
+**وضعیت: تقریباً کامل فیکس شد — فقط `User`, `Category`, `Tag` (به دلایل عمدی زیر) باقی مونده.**
 - `RoutineTemplateTask`, `RoutineInstanceTask`, `GoalMilestone`, `ProjectMilestone` قبلاً در فاز‌های Routines/Milestones اضافه شده بودن.
 - `HabitLogEntity` + `HabitLogDao` این نوبت اضافه شد (تاریخچه‌ی روزانه‌ی تکمیل هر عادت، هم از چک‌این دستی در `HabitsScreen` و هم از تکمیل تسک‌های وصل‌شده به عادت در `TodayScreen`) — پایه‌ی داده‌ای لازم برای آمار هفتگی/ماهانه‌ی بخش ۱۷.
 - `UserPreference` عمداً به‌صورت Entity جدا اضافه نشد چون همین الان با `PreferencesManager`/DataStore پیاده‌سازی شده (معماری درست‌تر از یک جدول Room برای key-value ساده).
-- `CalendarEvent`, `AIConversation`, `AIMessage`, `AIAction` هنوز جا افتاده‌ن (`AIConversation`/`AIMessage` در فاز ۴ اضافه شدن — این خط قدیمیه، پایین‌تر تصحیح شده). `AnalyticsEvent` عمداً اضافه نشد چون در فاز ۶ آمار مستقیم از جداول موجود (`tasks`, `focus_sessions`, `habit_logs`, `goals`, `routine_instances`) محاسبه می‌شه؛ یک جدول رویداد خام جدا فعلاً بدون مصرف‌کننده، کد مرده می‌بود.
-  - بخش `FocusSession` با فاز ۵ اضافه شد؛ `AIConversation`/`AIMessage` با فاز ۴ اضافه شدن. `CalendarEvent`, `AIAction` هنوز جا افتاده‌ن.
+- `CalendarEvent`, `AIAction` این نوبت اضافه شدن. `AIConversation`/`AIMessage` قبلاً در فاز ۴ اضافه شده بودن. `AnalyticsEvent` عمداً اضافه نشد چون در فاز ۶ آمار مستقیم از جداول موجود (`tasks`, `focus_sessions`, `habit_logs`, `goals`, `routine_instances`) محاسبه می‌شه؛ یک جدول رویداد خام جدا فعلاً بدون مصرف‌کننده، کد مرده می‌بود.
+  - `AIActionDao.insertAction` توی تک‌نقطه‌ی مشترک `AIToolCatalog.fromToolResult`/`applyConfirmation` صدا زده می‌شه، پس هر اکشن واقعی AI (نه صرفاً `get_*` های خواندنی) چه موفق چه ناموفق ثبت می‌شه — مستقل از تاریخچه‌ی چت (`AIConversation`/`AIMessage`).
+  - `CalendarEvent` فقط اسکلت داده‌ایه برای یکپارچه‌سازی تقویم خارجی آینده (بخش ۱۳ صراحتاً می‌گه لازم نیست توی این نسخه باشه)؛ عمداً به هیچ صفحه‌ای وصل نشده چون بدون یک سرویس sync واقعی، UI روش کد مرده می‌بود.
 - `Category`/`Tag` عمداً اضافه نشدن: در هیچ صفحه‌ای استفاده نمی‌شن، پس یک Entity/DAO بی‌UI فقط کد مرده‌ی جدید می‌سازه؛ باید همراه با UI فیلتر/دسته‌بندی تسک به‌عنوان یک فیچر مجزا کار بشه.
 - `User` نیازمند تصمیم معماری احراز هویت (local-only vs backend) هست، در بخش ۵۱ پرامپت هم به‌عنوان «authentication-ready» (نه لزوماً پیاده‌شده) خواسته شده؛ فاز بعدی.
 
