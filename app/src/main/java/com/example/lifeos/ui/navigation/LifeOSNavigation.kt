@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -25,6 +26,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.example.lifeos.ui.screens.AIChatScreen
+import com.example.lifeos.ui.screens.AnalyticsScreen
 import com.example.lifeos.ui.screens.CalendarScreen
 import com.example.lifeos.ui.screens.FocusScreen
 import com.example.lifeos.ui.screens.HabitsScreen
@@ -51,6 +53,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
         override val baseRoute = "focus"
         fun routeForTask(taskId: String) = "focus?taskId=$taskId"
     }
+    object Analytics : Screen("analytics", "تحلیل", Icons.Default.Insights)
     object AIChat : Screen("ai_chat", "دستیار", Icons.Default.Star)
     object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
 }
@@ -62,6 +65,7 @@ val bottomNavItems = listOf(
     Screen.Habits,
     Screen.Routines,
     Screen.Focus,
+    Screen.Analytics,
     Screen.AIChat,
     Screen.Settings
 )
@@ -109,6 +113,9 @@ fun LifeOSNavHost(
         }
         composable(Screen.AIChat.route) {
             AIChatScreen()
+        }
+        composable(Screen.Analytics.route) {
+            AnalyticsScreen()
         }
         composable(Screen.Settings.route) {
             SettingsScreen()
