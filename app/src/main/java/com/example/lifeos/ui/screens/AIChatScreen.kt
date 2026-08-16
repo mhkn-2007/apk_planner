@@ -22,6 +22,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.lifeos.ai.provider.GeminiProvider
 import com.example.lifeos.ai.tools.AIToolCatalog
 import com.example.lifeos.ai.tools.AIToolLayer
+import com.example.lifeos.data.database.dao.AIConversationDao
+import com.example.lifeos.data.database.entities.AIConversationEntity
+import com.example.lifeos.data.database.entities.AIMessageEntity
 import com.example.lifeos.ui.components.glassCard
 import com.example.lifeos.ui.theme.*
 import com.example.lifeos.util.PreferencesManager
@@ -54,7 +57,8 @@ data class PendingAction(
 class AIChatViewModel @Inject constructor(
     private val geminiProvider: GeminiProvider,
     private val toolCatalog: AIToolCatalog,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val conversationDao: AIConversationDao
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -71,12 +75,64 @@ class AIChatViewModel @Inject constructor(
     // don't send more than needed).
     private val history = mutableListOf<Pair<String, String>>()
 
+    // Persisted conversation this session is attached to (prompt section 60:
+    // "store relevant AI conversation history locally" / section 43:
+    // AIConversation/AIMessage entities). Resolved lazily on first use so the
+    // welcome message can render immediately without waiting on a DB read.
+    private var conversationId: String? = null
+    private var nextMessagePosition = 0
+
+    companion object {
+        private const val WELCOME_TEXT = "سلام! من دستیار هوشمند LifeOS هستم. می‌تونم کارها، اهداف، پروژه‌ها و روتین‌های شما رو مدیریت کنم، برنامه‌ی فردا یا هفته‌تون رو بچینم، یا کمک کنم روزتون رو مرور کنید. اگر هنوز کلید API را در تنظیمات وارد نکرده‌اید، این بخش در حالت آفلاین باقی می‌ماند و بقیه‌ی برنامه بدون تغییر کار می‌کند."
+        // A conversation older than this is treated as a "new session" for
+        // display purposes (still kept in the DB, just not auto-resumed),
+        // so re-opening the app after a long gap doesn't dump a stale
+        // multi-day-old thread back at the user.
+        private const val RESUME_WINDOW_MILLIS = 12 * 60 * 60 * 1000L // 12 hours
+    }
+
     init {
-        _messages.value = listOf(
-            ChatMessage(
-                text = "سلام! من دستیار هوشمند LifeOS هستم. می‌تونم کارها، اهداف، پروژه‌ها و روتین‌های شما رو مدیریت کنم. اگر هنوز کلید API را در تنظیمات وارد نکرده‌اید، این بخش در حالت آفلاین باقی می‌ماند و بقیه‌ی برنامه بدون تغییر کار می‌کند.",
-                isUser = false
+        viewModelScope.launch {
+            val recent = conversationDao.getMostRecentConversation()
+            val isFresh = recent != null &&
+                (System.currentTimeMillis() - recent.lastMessageAtMillis) < RESUME_WINDOW_MILLIS
+
+            if (isFresh && recent != null) {
+                conversationId = recent.id
+                val savedMessages = conversationDao.getMessagesForConversation(recent.id)
+                nextMessagePosition = savedMessages.size
+                if (savedMessages.isNotEmpty()) {
+                    _messages.value = savedMessages.map {
+                        ChatMessage(id = it.id, text = it.text, isUser = it.role == "user")
+                    }
+                    // Rebuild Gemini's turn history from the persisted transcript
+                    // (skipping our own local-only welcome message, which was
+                    // never sent to the model in the first place).
+                    history.addAll(savedMessages.map { it.role to it.text })
+                    return@launch
+                }
+            }
+
+            // No resumable conversation: start a fresh one with the welcome message.
+            val newConversation = AIConversationEntity()
+            conversationId = newConversation.id
+            conversationDao.insertConversation(newConversation)
+            _messages.value = listOf(ChatMessage(text = WELCOME_TEXT, isUser = false))
+        }
+    }
+
+    private suspend fun persistMessage(role: String, text: String) {
+        val convId = conversationId ?: return
+        conversationDao.insertMessage(
+            AIMessageEntity(
+                conversationId = convId,
+                role = role,
+                text = text,
+                position = nextMessagePosition++
             )
+        )
+        conversationDao.updateConversation(
+            AIConversationEntity(id = convId, lastMessageAtMillis = System.currentTimeMillis())
         )
     }
 
@@ -90,6 +146,7 @@ class AIChatViewModel @Inject constructor(
         _isTyping.value = true
 
         viewModelScope.launch {
+            persistMessage("user", text)
             try {
                 val apiKey = preferencesManager.apiKey.first()
                 runConversationTurn(apiKey)
@@ -111,9 +168,25 @@ class AIChatViewModel @Inject constructor(
         val systemInstruction = """
             شما دستیار برنامه‌ریزی شخصی LifeOS هستید. فقط از طریق ابزارهای اعلام‌شده به داده‌های کاربر
             دسترسی دارید و هرگز نباید داده یا اقدامی را جعل کنید. زمان فعلی دستگاه: $today.
+
+            برای درخواست‌های زیر، حتماً ابتدا ابزار مرتبط را صدا بزن تا داده‌ی واقعی داشته باشی، نه اینکه
+            حدس بزنی:
+            - «برنامه فردام رو بچین» یا مشابه آن: ابتدا get_daily_planning_context را صدا بزن، سپس بر اساس
+              کارهایی که در fitsInAvailableTime برگشته یک برنامه پیشنهاد بده و توضیح بده کدام کارها به
+              دلیل کمبود وقت به suggestedPostponements منتقل شدند. اگر لازم شد چند کار را واقعاً جابجا کنی
+              از reschedule_unfinished_tasks استفاده کن.
+            - «برنامه این هفته رو بچین»: مشابه بالا اما با get_weekly_planning_context.
+            - «امروز چطور بود» یا «چرا بهره‌وریم پایین بود»: get_daily_review را صدا بزن و بر اساس داده‌ی
+              واقعی (نه حدس) بازخورد بده.
+            - «می‌خوام برای X آماده بشم» یا هر قصد کلی که نیاز به شکستن به کارهای کوچک‌تر دارد:
+              break_down_goal را صدا بزن. اگر اطلاعات کافی برای تعیین کارهای دقیق نداری، فقط هدف و پروژه
+              (و در صورت امکان نقاط عطف) را بساز و از کاربر برای جزئیات بیشتر سؤال کن؛ کار بی‌ربط یا حدسی
+              نساز.
+
             برای عملیات‌های پرتاثیر (حذف/جابجایی چند کار)، ابزار مربوطه ممکن است نیاز به تأیید کاربر را
             گزارش کند؛ در این حالت فقط توضیح بده که منتظر تأیید کاربر هستید و از ابزار دیگری برای دور زدن
-            آن استفاده نکن. پاسخ‌ها را به فارسی و کوتاه بده.
+            آن استفاده نکن. هرگز بیش از حد لازم کار را با اولویت بحرانی/زیاد علامت نزن. پاسخ‌ها را به فارسی
+            و کوتاه بده.
         """.trimIndent()
 
         var turn = geminiProvider.sendTurn(
@@ -175,6 +248,7 @@ class AIChatViewModel @Inject constructor(
 
     private fun appendAssistantMessage(text: String) {
         _messages.value = _messages.value + ChatMessage(text = text, isUser = false)
+        viewModelScope.launch { persistMessage("model", text) }
     }
 }
 
