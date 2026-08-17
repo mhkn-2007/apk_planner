@@ -2,9 +2,11 @@ package com.example.lifeos.ui.screens
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
@@ -353,7 +355,10 @@ private fun FocusTimerCard(
     Box(modifier = Modifier.fillMaxWidth().glassCard().padding(20.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
             // Session type selector
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 SessionTypeChip("فوکوس", Icons.Default.Bolt, viewModel.sessionType == FocusSessionType.WORK, viewModel.isRunning) {
                     viewModel.selectSessionType(FocusSessionType.WORK)
                 }

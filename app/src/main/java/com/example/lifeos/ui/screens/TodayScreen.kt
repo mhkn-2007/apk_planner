@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -849,7 +850,12 @@ fun ConfigureHabitDialog(
         title = { Text("تنظیم عادت در برنامه روزانه", color = MaterialTheme.colorScheme.onBackground) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text("افزودن عادت «$habitName» به لیست کارهای امروز", style = MaterialTheme.typography.titleMedium, color = AccentGreen)
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
@@ -860,7 +866,7 @@ fun ConfigureHabitDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("اولویت:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
                     priorities.forEach { (label, value) ->
                         FilterChip(
@@ -872,7 +878,7 @@ fun ConfigureHabitDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("زمان انجام:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val times = listOf("صبح" to "MORNING", "عصر" to "AFTERNOON", "شب" to "NIGHT")
                     times.forEach { (label, value) ->
                         FilterChip(
@@ -940,7 +946,12 @@ fun AddTaskDialog(
         title = { Text("کار جدید", color = MaterialTheme.colorScheme.onBackground) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -958,7 +969,7 @@ fun AddTaskDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("اولویت:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
                     priorities.forEach { (label, value) ->
                         FilterChip(
@@ -970,7 +981,7 @@ fun AddTaskDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("زمان انجام کار (آلارم):", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val times = listOf("صبح (۹:۰۰)" to "MORNING", "عصر (۱۵:۰۰)" to "AFTERNOON", "شب (۲۱:۰۰)" to "NIGHT")
                     times.forEach { (label, value) ->
                         FilterChip(
@@ -1021,7 +1032,7 @@ fun AddTaskDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("تکرار:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val options = listOf("بدون تکرار" to "NONE", "روزانه" to "DAILY", "هفتگی" to "WEEKLY", "ماهانه" to "MONTHLY")
                     options.forEach { (label, value) ->
                         FilterChip(
@@ -1034,7 +1045,7 @@ fun AddTaskDialog(
                 if (recurrenceOption == "WEEKLY") {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("روزهای هفته:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         // Calendar.SUNDAY=1 .. Calendar.SATURDAY=7
                         val weekdayLabels = listOf("ش" to 7, "ی" to 1, "د" to 2, "س" to 3, "چ" to 4, "پ" to 5, "ج" to 6)
                         weekdayLabels.forEach { (label, calDay) ->
@@ -1140,7 +1151,7 @@ fun EditTaskDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("اولویت:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val priorities = listOf("عادی" to 0, "کم" to 1, "متوسط" to 2, "بالا" to 3, "بحرانی" to 4)
                     priorities.forEach { (label, value) ->
                         FilterChip(
@@ -1152,7 +1163,7 @@ fun EditTaskDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("زمان انجام کار (آلارم):", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val times = listOf("صبح" to "MORNING", "عصر" to "AFTERNOON", "شب" to "NIGHT")
                     times.forEach { (label, value) ->
                         FilterChip(
@@ -1297,7 +1308,7 @@ fun EditTaskDialog(
                 // tasks to long-term goals/projects) ---
                 Text("مرتبط با هدف:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     FilterChip(
                         selected = task.goalId == null,
                         onClick = { viewModel.linkTaskToGoal(task, null) },
@@ -1318,7 +1329,7 @@ fun EditTaskDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("مرتبط با پروژه:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     FilterChip(
                         selected = task.projectId == null,
                         onClick = { viewModel.linkTaskToProject(task, null) },
@@ -1339,7 +1350,7 @@ fun EditTaskDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("دسته‌بندی:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     FilterChip(
                         selected = task.categoryId == null,
                         onClick = { viewModel.linkTaskToCategory(task, null) },

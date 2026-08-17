@@ -98,7 +98,10 @@ fun AnalyticsScreen(
                 }
 
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         StatCard(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.CheckCircle,
@@ -119,7 +122,10 @@ fun AnalyticsScreen(
                 }
 
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         StatCard(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Timer,
