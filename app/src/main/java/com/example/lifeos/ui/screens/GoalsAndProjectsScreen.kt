@@ -16,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -370,7 +372,12 @@ fun GoalCard(goal: GoalEntity, viewModel: ProjectsViewModel) {
                     // Real, computed progress (prompt sections 15-16), not a
                     // stored value nothing ever set.
                     Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.semantics(mergeDescendants = true) {
+                            contentDescription = "پیشرفت هدف: ${goal.progressPercentage} درصد"
+                        }
+                    ) {
                         LinearProgressIndicator(
                             progress = { goal.progressPercentage / 100f },
                             modifier = Modifier.weight(1f).height(6.dp),
@@ -465,7 +472,12 @@ fun ProjectCard(project: ProjectEntity, viewModel: ProjectsViewModel) {
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.semantics(mergeDescendants = true) {
+                            contentDescription = "پیشرفت پروژه: ${project.progressPercentage} درصد"
+                        }
+                    ) {
                         LinearProgressIndicator(
                             progress = { project.progressPercentage / 100f },
                             modifier = Modifier.weight(1f).height(6.dp),

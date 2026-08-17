@@ -19,6 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -364,7 +367,25 @@ private fun FocusTimerCard(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(220.dp)
+                    // Prompt section 53 (Accessibility): mergeDescendants
+                    // would force TalkBack to re-announce the whole timer
+                    // every second as it ticks down. contentDescription +
+                    // stateDescription instead names what this is once and
+                    // exposes the changing time as state, which TalkBack
+                    // surfaces without a disruptive re-read every second.
+                    .semantics {
+                        contentDescription = when (viewModel.sessionType) {
+                            FocusSessionType.WORK -> "تایمر جلسه‌ی فوکوس"
+                            FocusSessionType.SHORT_BREAK -> "تایمر استراحت کوتاه"
+                            FocusSessionType.LONG_BREAK -> "تایمر استراحت بلند"
+                        }
+                        stateDescription = "%02d:%02d باقی‌مانده".format(minutes, seconds)
+                    }
+            ) {
                 CircularProgressIndicator(
                     progress = { progress },
                     modifier = Modifier.fillMaxSize(),

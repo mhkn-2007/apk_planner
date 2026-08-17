@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -255,6 +257,13 @@ private fun HabitConsistencyRow(hc: HabitConsistency) {
             .fillMaxWidth()
             .glassCard()
             .padding(14.dp)
+            // Prompt section 53 (Accessibility): without this, TalkBack reads
+            // the habit name, the "X% (Y/Z)" text, and the progress bar's own
+            // auto-generated percentage as three disconnected announcements.
+            // Merging them ties the number to what it's actually progress of.
+            .semantics(mergeDescendants = true) {
+                contentDescription = "عادت ${hc.habit.name}: ${hc.percentage} درصد تکمیل، ${hc.completedDays} از ${hc.totalDays} روز"
+            }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -288,6 +297,9 @@ private fun GoalProgressRow(gp: GoalProgressSummary) {
             .fillMaxWidth()
             .glassCard()
             .padding(14.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "هدف ${gp.goal.title}: ${gp.goal.progressPercentage} درصد تکمیل"
+            }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
