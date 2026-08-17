@@ -103,7 +103,7 @@ dependencies {
     // section 51: "secure secret management" — plain DataStore is readable
     // by anyone with device backup/root access, which is not acceptable for
     // a credential).
-    implementation("androidx.security:security-crypto:1.0.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // HTTP client for the real Gemini AI provider (prompt sections 20-41)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
