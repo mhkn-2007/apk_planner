@@ -1283,6 +1283,53 @@ fun EditTaskDialog(
                         }
                     }
                 }
+
+                // "Notify before due time" quick options: the user asked for
+                // a way to say "notify me X before I need to do this task"
+                // rather than only picking an absolute clock time. Requires
+                // the task to already have a scheduled time (alarmTimeMillis)
+                // since "before" is undefined otherwise.
+                if (task.alarmTimeMillis != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "اعلان قبل از موعد کار:",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val beforeOptions = listOf(
+                            "۵ دقیقه قبل" to 5,
+                            "۱۵ دقیقه قبل" to 15,
+                            "۳۰ دقیقه قبل" to 30,
+                            "۱ ساعت قبل" to 60,
+                            "۱ روز قبل" to (24 * 60)
+                        )
+                        beforeOptions.forEach { (label, minutesBefore) ->
+                            val alreadyAdded = reminders.any {
+                                it.triggerTimeMillis == task.alarmTimeMillis!! - minutesBefore * 60_000L
+                            }
+                            AssistChip(
+                                onClick = {
+                                    if (!alreadyAdded) {
+                                        viewModel.addReminder(
+                                            task,
+                                            task.alarmTimeMillis!! - minutesBefore * 60_000L,
+                                            "یادآوری «${task.title}»"
+                                        )
+                                    }
+                                },
+                                enabled = !alreadyAdded,
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 Button(
                     onClick = {
                         val current = Calendar.getInstance()

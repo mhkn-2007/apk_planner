@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -289,7 +290,12 @@ private fun CategoryManagerDialog(
         title = { Text("دسته‌بندی‌ها", color = MaterialTheme.colorScheme.onBackground) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 categories.forEach { category ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
