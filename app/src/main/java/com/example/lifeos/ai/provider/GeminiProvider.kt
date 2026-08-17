@@ -48,16 +48,22 @@ data class AITurnResult(
 @Singleton
 class GeminiProvider @Inject constructor() : AIProvider {
 
-    private val client = OkHttpClient.Builder()
+    // Package-private `var`s (not `val`) purely so tests can swap in a
+    // MockWebServer-backed client/URL and exercise real network failure
+    // paths (timeouts, malformed bodies, HTTP error codes) instead of only
+    // testing the pure-logic pieces. Production code never touches these
+    // setters — they keep their real defaults unless a test overrides them.
+    internal var client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    internal var baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     companion object {
         private const val MODEL = "gemini-2.0-flash"
-        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
     }
 
     /** Thrown for any AI failure — missing key, network, rate limit, malformed response, etc. */
@@ -100,7 +106,7 @@ class GeminiProvider @Inject constructor() : AIProvider {
         }
 
         val request = Request.Builder()
-            .url("$BASE_URL/$MODEL:generateContent?key=$apiKey")
+            .url("$baseUrl/$MODEL:generateContent?key=$apiKey")
             .post(requestBody.toString().toRequestBody(jsonMediaType))
             .build()
 
@@ -122,13 +128,13 @@ class GeminiProvider @Inject constructor() : AIProvider {
         }
     }
 
-    private fun parseErrorMessage(bodyStr: String): String? = try {
+    internal fun parseErrorMessage(bodyStr: String): String? = try {
         JSONObject(bodyStr).optJSONObject("error")?.optString("message")
     } catch (e: Exception) {
         null
     }
 
-    private fun parseTurnResult(bodyStr: String): AITurnResult {
+    internal fun parseTurnResult(bodyStr: String): AITurnResult {
         val root = JSONObject(bodyStr)
         val candidates = root.optJSONArray("candidates")
         if (candidates == null || candidates.length() == 0) {

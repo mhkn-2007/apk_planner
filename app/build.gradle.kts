@@ -113,6 +113,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.9")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     // Robolectric lets Room's in-memory database run inside a plain JVM
     // `test` source set (no emulator/device needed), which is what
     // section 57's "database relationships" / DAO-level test coverage
