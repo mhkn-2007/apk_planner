@@ -58,6 +58,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    testOptions {
+        unitTests {
+            // Robolectric-backed Room DAO tests (section 57 coverage) need
+            // this to resolve Android resources/manifest inside a plain JVM
+            // unit test.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -105,6 +113,14 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.9")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    // Robolectric lets Room's in-memory database run inside a plain JVM
+    // `test` source set (no emulator/device needed), which is what
+    // section 57's "database relationships" / DAO-level test coverage
+    // needs -- Room's generated code requires an actual SQLite driver
+    // that a bare JVM unit test doesn't otherwise have.
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("androidx.test:core:1.5.0")
+    testImplementation("androidx.room:room-testing:$room_version")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
