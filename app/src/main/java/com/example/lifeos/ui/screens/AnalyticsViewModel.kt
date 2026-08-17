@@ -140,7 +140,7 @@ class AnalyticsViewModel @Inject constructor(
      * Requires at least a handful of data points to avoid a misleadingly
      * confident claim from 1-2 completions.
      */
-    private fun computeMostProductiveHourRange(timestamps: List<Long>): String? {
+    internal fun computeMostProductiveHourRange(timestamps: List<Long>): String? {
         if (timestamps.size < 5) return null
         val hourCounts = IntArray(24)
         val cal = Calendar.getInstance()
@@ -161,7 +161,7 @@ class AnalyticsViewModel @Inject constructor(
         return "%02d:00 تا %02d:00".format(bestStartHour, bestStartHour + 3)
     }
 
-    private fun daysBetween(startMillis: Long, endMillis: Long): Int {
+    internal fun daysBetween(startMillis: Long, endMillis: Long): Int {
         val days = ((endMillis - startMillis) / (24 * 60 * 60 * 1000L)).toInt() + 1
         return days.coerceAtLeast(1)
     }
@@ -172,7 +172,7 @@ class AnalyticsViewModel @Inject constructor(
      * today. Week starts on Saturday (شنبه), matching JalaliCalendarUtil's
      * existing week-start convention used elsewhere in the app.
      */
-    private fun rangeFor(period: AnalyticsPeriod): Pair<Long, Long> {
+    internal fun rangeFor(period: AnalyticsPeriod): Pair<Long, Long> {
         val now = System.currentTimeMillis()
         val today = JalaliCalendarUtil.gregorianToJalali(now)
 
