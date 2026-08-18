@@ -125,6 +125,14 @@ class TodayViewModel @Inject constructor(
         categoryDao.getAllCategories()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Per-taskId caches — see the comment on
+    // ProjectsViewModel.getMilestonesForGoal for why these exist: without
+    // memoization, EditTaskDialog calling getSubtasksForTask/
+    // getRemindersForTask directly in its @Composable body got a fresh,
+    // momentarily-empty StateFlow on every recomposition.
+    private val subtaskFlows = mutableMapOf<String, StateFlow<List<com.example.lifeos.data.database.entities.SubtaskEntity>>>()
+    private val reminderFlows = mutableMapOf<String, StateFlow<List<com.example.lifeos.data.database.entities.ReminderEntity>>>()
+
     fun createCategory(name: String, colorHex: String) {
         if (name.isBlank()) return
         viewModelScope.launch {
@@ -197,7 +205,8 @@ class TodayViewModel @Inject constructor(
         customHour: Int? = null,
         customMinute: Int? = null,
         recurrenceRule: RecurrenceRule? = null,
-        estimatedDurationMinutes: Int? = null
+        estimatedDurationMinutes: Int? = null,
+        isAlarmRing: Boolean = true
     ) {
         if (title.isBlank()) return
         viewModelScope.launch {
@@ -260,13 +269,14 @@ class TodayViewModel @Inject constructor(
                 startTimeMillis = if (alarmTime != null && validDuration != null) alarmTime else null,
                 endTimeMillis = computedEndTime,
                 estimatedDurationMinutes = validDuration,
+                isAlarmRing = isAlarmRing,
                 recurrenceRule = recurrenceRule?.encode(),
                 recurrenceGroupId = recurrenceGroupId
             )
             taskRepository.insertTask(task)
 
             alarmTime?.let {
-                alarmScheduler.scheduleAlarm(context, task.id, task.title, it)
+                alarmScheduler.scheduleAlarm(context, task.id, task.title, it, isAlarmRing)
             }
 
             // Materialize the rest of this series' occurrences right away so
@@ -295,7 +305,7 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    fun updateTask(task: TaskEntity, newTitle: String, newDesc: String, newPriority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null, estimatedDurationMinutes: Int? = null) {
+    fun updateTask(task: TaskEntity, newTitle: String, newDesc: String, newPriority: Int, timeOfDay: String? = null, customHour: Int? = null, customMinute: Int? = null, estimatedDurationMinutes: Int? = null, isAlarmRing: Boolean = task.isAlarmRing) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             var alarmTime: Long? = null
@@ -346,14 +356,15 @@ class TodayViewModel @Inject constructor(
                 alarmTimeMillis = alarmTime,
                 startTimeMillis = if (alarmTime != null && validDuration != null) alarmTime else null,
                 endTimeMillis = computedEndTime,
-                estimatedDurationMinutes = validDuration ?: task.estimatedDurationMinutes
+                estimatedDurationMinutes = validDuration ?: task.estimatedDurationMinutes,
+                isAlarmRing = isAlarmRing
             )
             taskRepository.updateTask(updated)
 
             // Reschedule or cancel alarm
             alarmScheduler.cancelAlarm(context, task.id)
             alarmTime?.let {
-                alarmScheduler.scheduleAlarm(context, task.id, updated.title, it)
+                alarmScheduler.scheduleAlarm(context, task.id, updated.title, it, isAlarmRing)
             }
         }
     }
@@ -475,8 +486,10 @@ class TodayViewModel @Inject constructor(
     // --- Subtasks ---
 
     fun getSubtasksForTask(taskId: String): StateFlow<List<com.example.lifeos.data.database.entities.SubtaskEntity>> {
-        return taskRepository.getSubtasksForTask(taskId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        return subtaskFlows.getOrPut(taskId) {
+            taskRepository.getSubtasksForTask(taskId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
     }
 
     fun addSubtask(taskId: String, title: String, position: Int) {
@@ -507,8 +520,10 @@ class TodayViewModel @Inject constructor(
     // --- Reminders ---
 
     fun getRemindersForTask(taskId: String): StateFlow<List<com.example.lifeos.data.database.entities.ReminderEntity>> {
-        return taskRepository.getRemindersForTask(taskId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        return reminderFlows.getOrPut(taskId) {
+            taskRepository.getRemindersForTask(taskId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
     }
 
     fun addReminder(task: TaskEntity, triggerTimeMillis: Long, message: String?) {

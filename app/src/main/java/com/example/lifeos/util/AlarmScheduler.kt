@@ -20,8 +20,8 @@ import javax.inject.Singleton
 @Singleton
 class AlarmScheduler @Inject constructor() {
 
-    fun scheduleAlarm(context: Context, taskId: String, title: String, triggerAtMillis: Long) {
-        scheduleAlarmInternal(context, requestKey = taskId, taskId = taskId, title = title, message = null, triggerAtMillis = triggerAtMillis)
+    fun scheduleAlarm(context: Context, taskId: String, title: String, triggerAtMillis: Long, isAlarmRing: Boolean = true) {
+        scheduleAlarmInternal(context, requestKey = taskId, taskId = taskId, title = title, message = null, triggerAtMillis = triggerAtMillis, isAlarmRing = isAlarmRing)
     }
 
     fun cancelAlarm(context: Context, taskId: String) {
@@ -40,7 +40,8 @@ class AlarmScheduler @Inject constructor() {
         taskId: String,
         title: String,
         message: String?,
-        triggerAtMillis: Long
+        triggerAtMillis: Long,
+        isAlarmRing: Boolean = true
     ) {
         scheduleAlarmInternal(
             context,
@@ -49,7 +50,8 @@ class AlarmScheduler @Inject constructor() {
             reminderId = reminderId,
             title = title,
             message = message,
-            triggerAtMillis = triggerAtMillis
+            triggerAtMillis = triggerAtMillis,
+            isAlarmRing = isAlarmRing
         )
     }
 
@@ -90,13 +92,15 @@ class AlarmScheduler @Inject constructor() {
         title: String,
         message: String?,
         triggerAtMillis: Long,
-        reminderId: String? = null
+        reminderId: String? = null,
+        isAlarmRing: Boolean = true
     ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra("TASK_ID", taskId)
             putExtra("TASK_TITLE", title)
+            putExtra("IS_ALARM_RING", isAlarmRing)
             if (message != null) putExtra("REMINDER_MESSAGE", message)
             if (reminderId != null) putExtra("REMINDER_ID", reminderId)
         }
@@ -178,6 +182,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val message = intent.getStringExtra("REMINDER_MESSAGE")
         val reminderId = intent.getStringExtra("REMINDER_ID")
         val taskId = intent.getStringExtra("TASK_ID") ?: return
+        val isAlarmRing = intent.getBooleanExtra("IS_ALARM_RING", true)
 
         // Respect the user's notification toggle in Settings (prompt section
         // 45: "Users must be able to control notification preferences").
@@ -195,13 +200,33 @@ class AlarmReceiver : BroadcastReceiver() {
                 ).preferencesManager()
                 val notificationsEnabled = preferencesManager.isNotificationsEnabled.first()
                 if (notificationsEnabled) {
-                    NotificationHelper.createNotificationChannel(context)
-                    NotificationHelper.showNotification(
-                        context,
-                        notificationId = (reminderId ?: taskId).hashCode(),
-                        title = "یادآوری LifeOS",
-                        content = message ?: title
-                    )
+                    if (isAlarmRing) {
+                        // Launch the full-screen ringing alarm directly
+                        // (prompt sections 10/45: reminders must reliably
+                        // reach the user). A plain notification can be
+                        // silenced by the phone's ringer/DND state and is
+                        // easy to swipe away without reading — this instead
+                        // behaves like a phone clock alarm: it rings,
+                        // vibrates, and requires an explicit dismissal.
+                        // FLAG_ACTIVITY_NEW_TASK is required since we're
+                        // starting an Activity from a BroadcastReceiver's
+                        // application context, not from an existing Activity.
+                        val ringIntent = Intent(context, AlarmRingActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            putExtra("ALARM_TITLE", title)
+                            putExtra("ALARM_MESSAGE", message)
+                            putExtra("ALARM_ID", (reminderId ?: taskId).hashCode())
+                        }
+                        context.startActivity(ringIntent)
+                    } else {
+                        NotificationHelper.createNotificationChannel(context)
+                        NotificationHelper.showNotification(
+                            context,
+                            notificationId = (reminderId ?: taskId).hashCode(),
+                            title = "یادآوری LifeOS",
+                            content = message ?: title
+                        )
+                    }
                 }
             } finally {
                 pendingResult.finish()

@@ -63,6 +63,14 @@ class RoutinesViewModel @Inject constructor(
         routineDao.getAllTemplates()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Memoized per templateId — see the comment on
+    // ProjectsViewModel.getMilestonesForGoal for why: without this,
+    // RoutineTemplateCard (which calls getTemplateTasks directly in its
+    // @Composable body) got a brand-new, momentarily-empty StateFlow on
+    // every recomposition, which is what produced the visible "jump" each
+    // time a task was added to a routine.
+    private val templateTaskFlows = mutableMapOf<String, StateFlow<List<RoutineTemplateTaskEntity>>>()
+
     private fun startEndOfDay(dateMillis: Long): Pair<Long, Long> {
         val cal = Calendar.getInstance().apply {
             timeInMillis = dateMillis
@@ -75,8 +83,10 @@ class RoutinesViewModel @Inject constructor(
     }
 
     fun getTemplateTasks(templateId: String): StateFlow<List<RoutineTemplateTaskEntity>> {
-        return routineDao.getTemplateTasks(templateId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        return templateTaskFlows.getOrPut(templateId) {
+            routineDao.getTemplateTasks(templateId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
     }
 
     fun getTodaysInstances(): StateFlow<List<RoutineInstanceEntity>> {
@@ -85,9 +95,14 @@ class RoutinesViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
+    // Same memoization as templateTaskFlows above, for the per-day instance view.
+    private val instanceTaskFlows = mutableMapOf<String, StateFlow<List<RoutineInstanceTaskEntity>>>()
+
     fun getInstanceTasks(instanceId: String): StateFlow<List<RoutineInstanceTaskEntity>> {
-        return routineDao.getInstanceTasks(instanceId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        return instanceTaskFlows.getOrPut(instanceId) {
+            routineDao.getInstanceTasks(instanceId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
     }
 
     /** Creates a new reusable routine template together with its ordered tasks. */

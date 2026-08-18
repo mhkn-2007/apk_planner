@@ -58,6 +58,11 @@ class ProjectsViewModel @Inject constructor(
     private val _projects = MutableStateFlow<List<ProjectEntity>>(emptyList())
     val projects: StateFlow<List<ProjectEntity>> = _projects.asStateFlow()
 
+    // Per-id caches for getMilestonesForGoal/getMilestonesForProject below —
+    // see the comment on getMilestonesForGoal for why this exists.
+    private val goalMilestoneFlows = mutableMapOf<String, StateFlow<List<GoalMilestoneEntity>>>()
+    private val projectMilestoneFlows = mutableMapOf<String, StateFlow<List<ProjectMilestoneEntity>>>()
+
     init {
         viewModelScope.launch {
             goalDao.getAllGoals().collect { _goals.value = it }
@@ -95,8 +100,18 @@ class ProjectsViewModel @Inject constructor(
     }
 
     fun getMilestonesForGoal(goalId: String): StateFlow<List<GoalMilestoneEntity>> {
-        return milestoneDao.getMilestonesForGoal(goalId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        // Memoized per goalId — previously this rebuilt a brand-new StateFlow
+        // (starting at emptyList()) on every recomposition of GoalCard,
+        // since GoalCard calls this directly in its @Composable body. Each
+        // fresh StateFlow briefly showed an empty milestone list before its
+        // own DB read caught up, which is what produced the visible "jump"
+        // every time a milestone was added (progress change on the parent
+        // Goal list recomposes GoalCard, which used to hand back yet
+        // another new, momentarily-empty flow).
+        return goalMilestoneFlows.getOrPut(goalId) {
+            milestoneDao.getMilestonesForGoal(goalId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
     }
 
     fun toggleGoalMilestone(milestone: GoalMilestoneEntity) {
@@ -138,8 +153,10 @@ class ProjectsViewModel @Inject constructor(
     }
 
     fun getMilestonesForProject(projectId: String): StateFlow<List<ProjectMilestoneEntity>> {
-        return milestoneDao.getMilestonesForProject(projectId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        return projectMilestoneFlows.getOrPut(projectId) {
+            milestoneDao.getMilestonesForProject(projectId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
     }
 
     fun addProjectMilestone(projectId: String, title: String, position: Int) {

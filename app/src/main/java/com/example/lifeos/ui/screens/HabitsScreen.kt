@@ -198,25 +198,14 @@ fun HabitCard(
                     Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Column {
-                        Text("رکورد فعلی", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                        Text(
-                            "${habit.currentStreak} روز",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = AccentGreen,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Column {
-                        Text("بهترین رکورد", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                        Text(
-                            "${habit.longestStreak} روز",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = AccentAmber,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                Column {
+                    Text("رکورد فعلی", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    Text(
+                        "${habit.currentStreak} روز",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = AccentGreen,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 

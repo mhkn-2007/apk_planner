@@ -33,6 +33,14 @@ data class TaskEntity(
     val completedAtMillis: Long? = null,
     val timeOfDay: String? = null, // MORNING, AFTERNOON, NIGHT, CUSTOM
     val alarmTimeMillis: Long? = null, // specific scheduled alarm time
+    // When true (default), alarmTimeMillis fires as a real alarm — a
+    // full-screen ringing/vibrating screen the user must dismiss, the same
+    // way a phone's Clock app alarm works — rather than a normal
+    // dismissible notification that's easy to miss or that silently
+    // follows the phone's ringer/DND state. The user can turn this off per
+    // task (in AddTaskDialog/EditTaskDialog) for reminders that should stay
+    // low-key.
+    val isAlarmRing: Boolean = true,
     val createdAtMillis: Long = System.currentTimeMillis(),
     // --- Recurrence (prompt section 11) ---
     // Encoded rule, e.g. "DAILY", "WEEKLY:2,4" (Calendar.DAY_OF_WEEK values,

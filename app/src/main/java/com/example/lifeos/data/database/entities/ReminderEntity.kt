@@ -25,5 +25,9 @@ data class ReminderEntity(
     val triggerTimeMillis: Long,
     val title: String? = null,
     val message: String? = null,
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    // Same meaning as TaskEntity.isAlarmRing: when true (default), this
+    // reminder fires as a full-screen ringing alarm instead of a plain
+    // notification.
+    val isAlarmRing: Boolean = true
 )
