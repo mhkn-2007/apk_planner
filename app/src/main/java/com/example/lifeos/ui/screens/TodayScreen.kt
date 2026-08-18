@@ -466,7 +466,7 @@ class TodayViewModel @Inject constructor(
             // dropped them wouldn't be a real copy of the task.
             val copy = taskRepository.duplicateTask(task)
             copy.alarmTimeMillis?.let {
-                alarmScheduler.scheduleAlarm(context, copy.id, copy.title, it)
+                alarmScheduler.scheduleAlarm(context, copy.id, copy.title, it, copy.isAlarmRing)
             }
             taskRepository.getRemindersForTask(copy.id).first()
                 .filter { it.isEnabled }
@@ -477,7 +477,8 @@ class TodayViewModel @Inject constructor(
                         taskId = copy.id,
                         title = copy.title,
                         message = reminder.message,
-                        triggerAtMillis = reminder.triggerTimeMillis
+                        triggerAtMillis = reminder.triggerTimeMillis,
+                        isAlarmRing = reminder.isAlarmRing
                     )
                 }
         }
@@ -526,12 +527,13 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    fun addReminder(task: TaskEntity, triggerTimeMillis: Long, message: String?) {
+    fun addReminder(task: TaskEntity, triggerTimeMillis: Long, message: String?, isAlarmRing: Boolean = true) {
         viewModelScope.launch {
             val reminder = com.example.lifeos.data.database.entities.ReminderEntity(
                 taskId = task.id,
                 triggerTimeMillis = triggerTimeMillis,
-                message = message
+                message = message,
+                isAlarmRing = isAlarmRing
             )
             taskRepository.insertReminder(reminder)
             alarmScheduler.scheduleReminderAlarm(
@@ -540,7 +542,8 @@ class TodayViewModel @Inject constructor(
                 taskId = task.id,
                 title = task.title,
                 message = message,
-                triggerAtMillis = triggerTimeMillis
+                triggerAtMillis = triggerTimeMillis,
+                isAlarmRing = isAlarmRing
             )
         }
     }
@@ -555,7 +558,8 @@ class TodayViewModel @Inject constructor(
                     taskId = task.id,
                     title = task.title,
                     message = reminder.message,
-                    triggerAtMillis = reminder.triggerTimeMillis
+                    triggerAtMillis = reminder.triggerTimeMillis,
+                    isAlarmRing = reminder.isAlarmRing
                 )
             } else {
                 alarmScheduler.cancelReminderAlarm(context, reminder.id)
@@ -722,8 +726,8 @@ fun TodayScreen(
         if (showAddDialog) {
             AddTaskDialog(
                 onDismiss = { showAddDialog = false },
-                onAdd = { title, desc, priority, timeOfDay, hour, min, recurrenceRule, durationMinutes ->
-                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min, recurrenceRule, durationMinutes)
+                onAdd = { title, desc, priority, timeOfDay, hour, min, recurrenceRule, durationMinutes, isAlarmRing ->
+                    viewModel.addTask(title, desc, priority, timeOfDay, hour, min, recurrenceRule, durationMinutes, isAlarmRing)
                     showAddDialog = false
                 }
             )
@@ -756,8 +760,8 @@ fun TodayScreen(
                 task = selectedTaskForEdit!!,
                 viewModel = viewModel,
                 onDismiss = { selectedTaskForEdit = null },
-                onUpdate = { title, desc, priority, timeOfDay, hour, min, durationMinutes ->
-                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min, durationMinutes)
+                onUpdate = { title, desc, priority, timeOfDay, hour, min, durationMinutes, isAlarmRing ->
+                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min, durationMinutes, isAlarmRing)
                     selectedTaskForEdit = null
                 }
             )
@@ -943,7 +947,7 @@ fun ConfigureHabitDialog(
 @Composable
 fun AddTaskDialog(
     onDismiss: () -> Unit,
-    onAdd: (String, String, Int, String?, Int?, Int?, RecurrenceRule?, Int?) -> Unit
+    onAdd: (String, String, Int, String?, Int?, Int?, RecurrenceRule?, Int?, Boolean) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -952,6 +956,7 @@ fun AddTaskDialog(
     var customHour by remember { mutableStateOf<Int?>(null) }
     var customMinute by remember { mutableStateOf<Int?>(null) }
     var durationText by remember { mutableStateOf("") }
+    var isAlarmRing by remember { mutableStateOf(true) }
     var recurrenceOption by remember { mutableStateOf("NONE") } // NONE, DAILY, WEEKLY, MONTHLY
     val selectedWeekdays = remember { mutableStateListOf<Int>() }
     val context = LocalContext.current
@@ -1043,6 +1048,21 @@ fun AddTaskDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("زنگ هشدار (آلارم)", color = MaterialTheme.colorScheme.onBackground)
+                            Text(
+                                "به‌جای نوتیفیکیشن ساده، صفحه با صدا و ویبره زنگ می‌زند",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(checked = isAlarmRing, onCheckedChange = { isAlarmRing = it })
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1085,7 +1105,7 @@ fun AddTaskDialog(
                         "MONTHLY" -> RecurrenceRule.Monthly
                         else -> null
                     }
-                    onAdd(title, description, priority, timeOfDay, customHour, customMinute, rule, durationText.toIntOrNull())
+                    onAdd(title, description, priority, timeOfDay, customHour, customMinute, rule, durationText.toIntOrNull(), isAlarmRing)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
@@ -1106,13 +1126,14 @@ fun EditTaskDialog(
     task: TaskEntity,
     viewModel: TodayViewModel,
     onDismiss: () -> Unit,
-    onUpdate: (String, String, Int, String?, Int?, Int?, Int?) -> Unit
+    onUpdate: (String, String, Int, String?, Int?, Int?, Int?, Boolean) -> Unit
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
     var priority by remember { mutableIntStateOf(task.priority) }
     var timeOfDay by remember { mutableStateOf(task.timeOfDay) }
     var durationText by remember { mutableStateOf(task.estimatedDurationMinutes?.toString() ?: "") }
+    var isAlarmRing by remember { mutableStateOf(task.isAlarmRing) }
 
     // Parse custom hour/min if available from existing alarmTimeMillis
     var customHour by remember {
@@ -1223,6 +1244,21 @@ fun EditTaskDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("زنگ هشدار (آلارم)", color = MaterialTheme.colorScheme.onBackground)
+                            Text(
+                                "به‌جای نوتیفیکیشن ساده، صفحه با صدا و ویبره زنگ می‌زند",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(checked = isAlarmRing, onCheckedChange = { isAlarmRing = it })
+                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -1436,7 +1472,7 @@ fun EditTaskDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onUpdate(title, description, priority, timeOfDay, customHour, customMinute, durationText.toIntOrNull()) },
+                onClick = { onUpdate(title, description, priority, timeOfDay, customHour, customMinute, durationText.toIntOrNull(), isAlarmRing) },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
                 Text("بروزرسانی")

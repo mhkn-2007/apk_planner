@@ -247,8 +247,8 @@ fun TasksScreen(
                 task = selectedTaskForEdit!!,
                 viewModel = viewModel,
                 onDismiss = { selectedTaskForEdit = null },
-                onUpdate = { title, desc, priority, timeOfDay, hour, min, durationMinutes ->
-                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min, durationMinutes)
+                onUpdate = { title, desc, priority, timeOfDay, hour, min, durationMinutes, isAlarmRing ->
+                    viewModel.updateTask(selectedTaskForEdit!!, title, desc, priority, timeOfDay, hour, min, durationMinutes, isAlarmRing)
                     selectedTaskForEdit = null
                 }
             )
