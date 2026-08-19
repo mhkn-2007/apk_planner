@@ -3,9 +3,13 @@ package com.example.lifeos.ui.screens
 import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -42,6 +46,7 @@ class SettingsViewModel @Inject constructor(
     val isDarkMode = preferencesManager.isDarkMode
     val isNotificationsEnabled = preferencesManager.isNotificationsEnabled
     val apiKey = preferencesManager.apiKey
+    val alarmSoundUri = preferencesManager.alarmSoundUri
 
     fun setDarkMode(enabled: Boolean) {
         viewModelScope.launch { preferencesManager.setDarkMode(enabled) }
@@ -53,6 +58,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setApiKey(key: String) {
         viewModelScope.launch { preferencesManager.setApiKey(key) }
+    }
+
+    fun setAlarmSoundUri(uri: String?) {
+        viewModelScope.launch { preferencesManager.setAlarmSoundUri(uri) }
     }
 }
 
@@ -66,6 +75,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var notificationsEnabled by remember { mutableStateOf(true) }
     var apiKeyInput by remember { mutableStateOf("") }
     var isKeyVisible by remember { mutableStateOf(false) }
+    var alarmSoundUri by remember { mutableStateOf<String?>(null) }
+
+    val alarmSoundUriFlow by viewModel.alarmSoundUri.collectAsState(initial = null)
+    LaunchedEffect(alarmSoundUriFlow) {
+        alarmSoundUri = alarmSoundUriFlow
+    }
 
     LaunchedEffect(isDarkModeFlow) {
         isDarkMode = isDarkModeFlow
@@ -212,6 +227,76 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
+
+            // Alarm Sound Picker — lets the user choose which sound
+            // AlarmRingActivity plays for reminders/task alarms/focus-
+            // session alarms, instead of always using the device's default
+            // ALARM-type ringtone. Uses the system ringtone picker
+            // (ACTION_RINGTONE_PICKER) so the user gets the full set of
+            // sounds already on their phone plus any custom ringtones
+            // they've added, rather than LifeOS trying to bundle/enumerate
+            // sound files itself.
+            val ringtonePickerLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                    // A null uri here means the user picked "Silent" in the
+                    // picker, which is a deliberate choice (distinct from
+                    // never having picked anything) — store it as-is rather
+                    // than treating it as "no selection".
+                    alarmSoundUri = uri?.toString()
+                    viewModel.setAlarmSoundUri(uri?.toString())
+                }
+            }
+            val alarmSoundName = remember(alarmSoundUri) {
+                if (alarmSoundUri.isNullOrBlank()) {
+                    "پیش‌فرض سیستم"
+                } else {
+                    try {
+                        val ringtone: Ringtone? = RingtoneManager.getRingtone(context, Uri.parse(alarmSoundUri))
+                        ringtone?.getTitle(context) ?: "صدای انتخاب‌شده"
+                    } catch (e: Exception) {
+                        "صدای انتخاب‌شده"
+                    }
+                }
+            }
+            Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("صدای آلارم", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            alarmSoundName,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    TextButton(onClick = {
+                        val existingUri = alarmSoundUri?.let { Uri.parse(it) }
+                            ?: RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)
+                        val pickerIntent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "انتخاب صدای آلارم")
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existingUri)
+                            putExtra(
+                                RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
+                                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                            )
+                        }
+                        ringtonePickerLauncher.launch(pickerIntent)
+                    }) {
+                        Text("تغییر", color = AccentBlue)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // API Key Input
             Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {

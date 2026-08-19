@@ -4,6 +4,7 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -30,6 +31,12 @@ import com.example.lifeos.ui.theme.GradientEnd
 import com.example.lifeos.ui.theme.GradientMiddle
 import com.example.lifeos.ui.theme.GradientStart
 import com.example.lifeos.ui.theme.LifeOSTheme
+import dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoints
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 /**
  * Full-screen ringing alarm, launched by [AlarmReceiver] when a task's
@@ -38,9 +45,10 @@ import com.example.lifeos.ui.theme.LifeOSTheme
  * must reliably reach the user. Unlike a plain notification, this:
  * - shows over the lock screen and turns the screen on, so it isn't missed
  *   while the phone is idle
- * - plays the device's default alarm sound on loop and vibrates
- *   continuously until dismissed, instead of a single silent/short buzz
- *   that follows the phone's ringer/DND state
+ * - plays the user's chosen alarm sound (Settings -> "صدای آلارم"), falling
+ *   back to the device's default ALARM-type ringtone if none was picked, on
+ *   loop and vibrates continuously until dismissed, instead of a single
+ *   silent/short buzz that follows the phone's ringer/DND state
  * - has no swipe-away shortcut — the only way out is the explicit "خاموش
  *   کردن" button, the same contract a phone clock alarm has
  *
@@ -52,6 +60,17 @@ class AlarmRingActivity : ComponentActivity() {
 
     private var ringtone: android.media.Ringtone? = null
     private var vibrator: Vibrator? = null
+
+    /**
+     * Same EntryPoint pattern [AlarmReceiver] already uses to reach the
+     * app-wide [PreferencesManager] singleton from a framework-constructed
+     * class without an @Inject constructor.
+     */
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface PreferencesManagerEntryPoint {
+        fun preferencesManager(): PreferencesManager
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,9 +119,30 @@ class AlarmRingActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
+    /**
+     * Reads the user's chosen alarm sound from Settings. This is a
+     * one-shot synchronous read via [runBlocking] on the main thread at
+     * Activity startup (not a long-lived subscription): DataStore reads are
+     * fast local disk/mmap reads, and the alarm needs a definite sound URI
+     * before [startRinging] runs, not a value that could still be loading.
+     */
+    private fun getSavedAlarmSoundUri(): Uri? {
+        return try {
+            val preferencesManager = EntryPoints.get(
+                applicationContext,
+                PreferencesManagerEntryPoint::class.java
+            ).preferencesManager()
+            val savedUri = runBlocking { preferencesManager.alarmSoundUri.first() }
+            savedUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun startRinging() {
         try {
-            val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
+            val alarmUri = getSavedAlarmSoundUri()
+                ?: RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ringtone = RingtoneManager.getRingtone(this, alarmUri)?.apply {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -115,11 +155,13 @@ class AlarmRingActivity : ComponentActivity() {
                 play()
             }
         } catch (e: Exception) {
-            // If the device has no default alarm sound configured or
-            // playback fails for any reason, the vibration below still
-            // gets the user's attention — never let a sound failure crash
-            // the alarm screen itself (prompt section 52: gracefully
-            // handle errors, never let a recoverable one crash).
+            // If the device has no default alarm sound configured, the
+            // chosen sound URI is no longer valid (e.g. its file was
+            // deleted), or playback fails for any other reason, the
+            // vibration below still gets the user's attention — never let
+            // a sound failure crash the alarm screen itself (prompt
+            // section 52: gracefully handle errors, never let a
+            // recoverable one crash).
         }
 
         try {
