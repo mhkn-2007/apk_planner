@@ -89,11 +89,25 @@ class RoutinesViewModel @Inject constructor(
         }
     }
 
-    fun getTodaysInstances(): StateFlow<List<RoutineInstanceEntity>> {
+    // Memoized (this ViewModel is a singleton per Routines screen, so this
+    // only ever needs to build once) — previously getTodaysInstances()
+    // built a brand-new StateFlow via stateIn() on every call, and because
+    // RoutinesScreen calls it directly in its @Composable body
+    // (`viewModel.getTodaysInstances().collectAsState()`), every
+    // recomposition handed back yet another fresh, momentarily-empty flow.
+    // Immediately after addTemplateToToday's insertInstance/
+    // insertInstanceTasks calls trigger a recomposition, this raced a new
+    // flow's initial (empty) state against the previous flow's already-
+    // loaded state and could throw ("Reading a state that was created
+    // after the snapshot was taken") — which is what crashed the app back
+    // to the launcher right after tapping "افزودن به امروز".
+    private val todaysInstancesFlow: StateFlow<List<RoutineInstanceEntity>> by lazy {
         val (start, end) = startEndOfDay(System.currentTimeMillis())
-        return routineDao.getInstancesForDateRange(start, end)
+        routineDao.getInstancesForDateRange(start, end)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
+
+    fun getTodaysInstances(): StateFlow<List<RoutineInstanceEntity>> = todaysInstancesFlow
 
     // Same memoization as templateTaskFlows above, for the per-day instance view.
     private val instanceTaskFlows = mutableMapOf<String, StateFlow<List<RoutineInstanceTaskEntity>>>()
@@ -176,24 +190,33 @@ class RoutinesViewModel @Inject constructor(
     /**
      * Adds a template to today's plan: creates a RoutineInstance and copies
      * every RoutineTemplateTask into a fresh, independent RoutineInstanceTask.
+     * Wrapped defensively (prompt section 52: a recoverable error must
+     * never crash the app) since this write is followed immediately by a
+     * UI recomposition of the just-inserted instance.
      */
     fun addTemplateToToday(template: RoutineTemplateEntity) {
         viewModelScope.launch {
-            val instance = RoutineInstanceEntity(
-                templateId = template.id,
-                dateMillis = System.currentTimeMillis()
-            )
-            routineDao.insertInstance(instance)
-            val templateTasks = routineDao.getTemplateTasksOnce(template.id)
-            val instanceTasks = templateTasks.map {
-                RoutineInstanceTaskEntity(
-                    instanceId = instance.id,
-                    title = it.title,
-                    estimatedDurationMinutes = it.estimatedDurationMinutes,
-                    position = it.position
+            try {
+                val instance = RoutineInstanceEntity(
+                    templateId = template.id,
+                    dateMillis = System.currentTimeMillis()
                 )
+                routineDao.insertInstance(instance)
+                val templateTasks = routineDao.getTemplateTasksOnce(template.id)
+                val instanceTasks = templateTasks.map {
+                    RoutineInstanceTaskEntity(
+                        instanceId = instance.id,
+                        title = it.title,
+                        estimatedDurationMinutes = it.estimatedDurationMinutes,
+                        position = it.position
+                    )
+                }
+                routineDao.insertInstanceTasks(instanceTasks)
+            } catch (e: Exception) {
+                // Swallow and log rather than propagate — an uncaught
+                // exception here previously took the whole app down.
+                android.util.Log.e("RoutinesViewModel", "addTemplateToToday failed", e)
             }
-            routineDao.insertInstanceTasks(instanceTasks)
         }
     }
 
