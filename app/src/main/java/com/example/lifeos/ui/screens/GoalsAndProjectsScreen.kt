@@ -9,8 +9,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -97,6 +100,41 @@ class ProjectsViewModel @Inject constructor(
                 )
             )
         }
+    }
+
+    /** Updates only title/description (prompt section 15: "Edit goals") — progress/milestones/links are untouched. */
+    fun updateGoalDetails(goal: GoalEntity, title: String, description: String) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            goalDao.updateGoal(goal.copy(title = title, description = description.ifBlank { null }))
+        }
+    }
+
+    /**
+     * Deletes a goal. Projects previously linked to it are NOT deleted —
+     * only unlinked (goalId set to null) — since a project is its own
+     * independent unit of work (prompt section 16) that shouldn't vanish
+     * just because the goal organizing it was removed.
+     */
+    fun deleteGoal(goal: GoalEntity) {
+        viewModelScope.launch {
+            projectDao.getProjectsByGoal(goal.id).first().forEach { project ->
+                projectDao.updateProject(project.copy(goalId = null))
+            }
+            goalDao.deleteGoal(goal)
+        }
+    }
+
+    /** Updates only name/description (prompt section 16: "Edit projects") — progress/milestones/links are untouched. */
+    fun updateProjectDetails(project: ProjectEntity, name: String, description: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            projectDao.updateProject(project.copy(name = name, description = description.ifBlank { null }))
+        }
+    }
+
+    fun deleteProject(project: ProjectEntity) {
+        viewModelScope.launch { projectDao.deleteProject(project) }
     }
 
     fun getMilestonesForGoal(goalId: String): StateFlow<List<GoalMilestoneEntity>> {
@@ -206,6 +244,7 @@ class ProjectsViewModel @Inject constructor(
 fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     val goals by viewModel.goals.collectAsState()
     var showAddGoalDialog by remember { mutableStateOf(false) }
+    var goalBeingEdited by remember { mutableStateOf<GoalEntity?>(null) }
 
     // Refresh progress on entering the screen so a task completed elsewhere
     // (Today/Tasks/AI) since the last visit is reflected immediately, not
@@ -253,7 +292,12 @@ fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     modifier = Modifier.weight(1f)
                 ) {
                     items(goals) { goal ->
-                        GoalCard(goal = goal, viewModel = viewModel)
+                        GoalCard(
+                            goal = goal,
+                            viewModel = viewModel,
+                            onEdit = { goalBeingEdited = goal },
+                            onDelete = { viewModel.deleteGoal(goal) }
+                        )
                     }
                 }
             }
@@ -277,6 +321,21 @@ fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                 onAdd = { name, desc -> viewModel.addGoal(name, desc); showAddGoalDialog = false }
             )
         }
+
+        goalBeingEdited?.let { goal ->
+            SimpleAddDialog(
+                title = "ویرایش هدف",
+                nameLabel = "عنوان هدف",
+                confirmLabel = "ذخیره تغییرات",
+                initialName = goal.title,
+                initialDescription = goal.description.orEmpty(),
+                onDismiss = { goalBeingEdited = null },
+                onAdd = { name, desc ->
+                    viewModel.updateGoalDetails(goal, name, desc)
+                    goalBeingEdited = null
+                }
+            )
+        }
     }
 }
 
@@ -284,6 +343,7 @@ fun GoalsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
 fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
     val projects by viewModel.projects.collectAsState()
     var showAddProjectDialog by remember { mutableStateOf(false) }
+    var projectBeingEdited by remember { mutableStateOf<ProjectEntity?>(null) }
 
     LaunchedEffect(projects.map { it.id }) {
         viewModel.refreshAllProgress()
@@ -334,7 +394,12 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                     modifier = Modifier.weight(1f)
                 ) {
                     items(projects) { project ->
-                        ProjectCard(project = project, viewModel = viewModel)
+                        ProjectCard(
+                            project = project,
+                            viewModel = viewModel,
+                            onEdit = { projectBeingEdited = project },
+                            onDelete = { viewModel.deleteProject(project) }
+                        )
                     }
                 }
             }
@@ -358,14 +423,35 @@ fun ProjectsScreen(viewModel: ProjectsViewModel = hiltViewModel()) {
                 onAdd = { name, desc -> viewModel.addProject(name, desc, null); showAddProjectDialog = false }
             )
         }
+
+        projectBeingEdited?.let { project ->
+            SimpleAddDialog(
+                title = "ویرایش پروژه",
+                nameLabel = "نام پروژه",
+                confirmLabel = "ذخیره تغییرات",
+                initialName = project.name,
+                initialDescription = project.description.orEmpty(),
+                onDismiss = { projectBeingEdited = null },
+                onAdd = { name, desc ->
+                    viewModel.updateProjectDetails(project, name, desc)
+                    projectBeingEdited = null
+                }
+            )
+        }
     }
 }
 
 @Composable
-fun GoalCard(goal: GoalEntity, viewModel: ProjectsViewModel) {
+fun GoalCard(
+    goal: GoalEntity,
+    viewModel: ProjectsViewModel,
+    onEdit: () -> Unit = {},
+    onDelete: () -> Unit = {}
+) {
     val milestones by viewModel.getMilestonesForGoal(goal.id).collectAsState()
     var expanded by remember { mutableStateOf(false) }
     var newMilestoneTitle by remember { mutableStateOf("") }
+    var showMenu by remember { mutableStateOf(false) }
     val completed = milestones.count { it.isCompleted }
 
     Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
@@ -414,6 +500,28 @@ fun GoalCard(goal: GoalEntity, viewModel: ProjectsViewModel) {
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "گزینه‌های بیشتر",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("ویرایش") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { showMenu = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("حذف", color = AccentRed) },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = AccentRed) },
+                            onClick = { showMenu = false; onDelete() }
+                        )
+                    }
+                }
             }
             if (expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -459,10 +567,16 @@ fun GoalCard(goal: GoalEntity, viewModel: ProjectsViewModel) {
 }
 
 @Composable
-fun ProjectCard(project: ProjectEntity, viewModel: ProjectsViewModel) {
+fun ProjectCard(
+    project: ProjectEntity,
+    viewModel: ProjectsViewModel,
+    onEdit: () -> Unit = {},
+    onDelete: () -> Unit = {}
+) {
     val milestones by viewModel.getMilestonesForProject(project.id).collectAsState()
     var expanded by remember { mutableStateOf(false) }
     var newMilestoneTitle by remember { mutableStateOf("") }
+    var showMenu by remember { mutableStateOf(false) }
     val completed = milestones.count { it.isCompleted }
 
     Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
@@ -514,6 +628,28 @@ fun ProjectCard(project: ProjectEntity, viewModel: ProjectsViewModel) {
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "گزینه‌های بیشتر",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("ویرایش") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { showMenu = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("حذف", color = AccentRed) },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = AccentRed) },
+                            onClick = { showMenu = false; onDelete() }
+                        )
+                    }
+                }
             }
             if (expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -559,9 +695,17 @@ fun ProjectCard(project: ProjectEntity, viewModel: ProjectsViewModel) {
 }
 
 @Composable
-fun SimpleAddDialog(title: String, nameLabel: String, onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var desc by remember { mutableStateOf("") }
+fun SimpleAddDialog(
+    title: String,
+    nameLabel: String,
+    onDismiss: () -> Unit,
+    onAdd: (String, String) -> Unit,
+    initialName: String = "",
+    initialDescription: String = "",
+    confirmLabel: String = "ذخیره"
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var desc by remember { mutableStateOf(initialDescription) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, color = MaterialTheme.colorScheme.onBackground) },
@@ -573,7 +717,7 @@ fun SimpleAddDialog(title: String, nameLabel: String, onDismiss: () -> Unit, onA
                 OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("توضیحات (اختیاری)") }, maxLines = 3, modifier = Modifier.fillMaxWidth())
             }
         },
-        confirmButton = { Button(onClick = { onAdd(name, desc) }, colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)) { Text("ذخیره") } },
+        confirmButton = { Button(onClick = { onAdd(name, desc) }, colors = ButtonDefaults.buttonColors(containerColor = AccentBlue), enabled = name.isNotBlank()) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } }
     )
 }
