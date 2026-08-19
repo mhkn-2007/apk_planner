@@ -34,6 +34,12 @@ class PreferencesManager @Inject constructor(
         // picked from their device (prompt: Settings should let the user
         // choose the app's default alarm sound or one from their phone).
         val ALARM_SOUND_URI_KEY = stringPreferencesKey("alarm_sound_uri")
+        // Tracks whether MainActivity has already sent the user to the
+        // system "Alarms & reminders" settings screen once for this app —
+        // SCHEDULE_EXACT_ALARM can't be granted via a normal in-app runtime
+        // dialog, only from that dedicated system screen, so we only
+        // redirect there once rather than nagging on every launch.
+        val HAS_REQUESTED_EXACT_ALARM_KEY = booleanPreferencesKey("has_requested_exact_alarm_permission")
         private const val ENCRYPTED_PREFS_NAME = "lifeos_secure_prefs"
         private const val API_KEY_PREF = "gemini_api_key"
     }
@@ -48,6 +54,16 @@ class PreferencesManager @Inject constructor(
 
     val alarmSoundUri: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[ALARM_SOUND_URI_KEY]
+    }
+
+    val hasRequestedExactAlarmPermission: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[HAS_REQUESTED_EXACT_ALARM_KEY] ?: false
+    }
+
+    suspend fun setHasRequestedExactAlarmPermission(value: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[HAS_REQUESTED_EXACT_ALARM_KEY] = value
+        }
     }
 
     suspend fun setAlarmSoundUri(uri: String?) {

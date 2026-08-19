@@ -1,17 +1,25 @@
 package com.example.lifeos.ui.screens
 
+import android.app.AlarmManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -143,6 +151,67 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Exact Alarm Permission Status — this is the #1 real-world
+            // cause of "آلارمی زده نمی‌شه" reports: on Android 12+,
+            // SCHEDULE_EXACT_ALARM can't be granted through a normal
+            // in-app permission dialog, only from this dedicated system
+            // screen, and it defaults to OFF for a sideloaded APK like
+            // this one. MainActivity already redirects here once
+            // automatically on first launch, but this card lets the user
+            // fix it manually afterward too (e.g. if they dismissed it, or
+            // an OEM later revoked it).
+            val context = LocalContext.current
+            var canScheduleExactAlarms by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                    canScheduleExactAlarms = alarmManager.canScheduleExactAlarms()
+                }
+            }
+            if (!canScheduleExactAlarms) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = AccentAmber)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("زمان‌بندی دقیق آلارم غیرفعال است", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "بدون این مجوز، یادآوری‌ها و آلارم‌ها ممکن است دیر یا اصلاً نمایش داده نشوند.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // OEM stripped this action; nothing more LifeOS can do from here.
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("فعال‌سازی در تنظیمات سیستم")
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // API Key Input
             Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
