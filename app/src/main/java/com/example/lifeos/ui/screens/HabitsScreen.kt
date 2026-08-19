@@ -8,6 +8,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,6 +65,18 @@ class HabitsViewModel @Inject constructor(
         }
     }
 
+    /** Updates only name/description (prompt section 17: "Edit habits") — streak/log history is untouched. */
+    fun updateHabitDetails(habit: HabitEntity, name: String, description: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            habitDao.updateHabit(habit.copy(name = name, description = description.ifBlank { null }))
+        }
+    }
+
+    fun deleteHabit(habit: HabitEntity) {
+        viewModelScope.launch { habitDao.deleteHabit(habit) }
+    }
+
     fun toggleHabitStreak(habit: HabitEntity) {
         val todayStr = JalaliCalendarUtil.gregorianToJalali(System.currentTimeMillis()).let {
             String.format("%04d-%02d-%02d", it.year, it.month, it.day)
@@ -100,6 +115,7 @@ class HabitsViewModel @Inject constructor(
 fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
     val habits by viewModel.habits.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
+    var habitBeingEdited by remember { mutableStateOf<HabitEntity?>(null) }
 
     // Dynamic gradient backgrounds depending on Light/Dark mode
     val isLight = !LocalIsDarkTheme.current
@@ -151,7 +167,9 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
                         HabitCard(
                             habit = habit,
                             isCheckedToday = isCheckedToday,
-                            onToggle = { viewModel.toggleHabitStreak(habit) }
+                            onToggle = { viewModel.toggleHabitStreak(habit) },
+                            onEdit = { habitBeingEdited = habit },
+                            onDelete = { viewModel.deleteHabit(habit) }
                         )
                     }
                 }
@@ -176,6 +194,21 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
                 onAdd = { name, desc -> viewModel.addHabit(name, desc); showAddDialog = false }
             )
         }
+
+        habitBeingEdited?.let { habit ->
+            SimpleAddDialog(
+                title = "ویرایش عادت",
+                nameLabel = "نام عادت",
+                confirmLabel = "ذخیره تغییرات",
+                initialName = habit.name,
+                initialDescription = habit.description.orEmpty(),
+                onDismiss = { habitBeingEdited = null },
+                onAdd = { name, desc ->
+                    viewModel.updateHabitDetails(habit, name, desc)
+                    habitBeingEdited = null
+                }
+            )
+        }
     }
 }
 
@@ -183,17 +216,46 @@ fun HabitsScreen(viewModel: HabitsViewModel = hiltViewModel()) {
 fun HabitCard(
     habit: HabitEntity,
     isCheckedToday: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onEdit: () -> Unit = {},
+    onDelete: () -> Unit = {}
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxWidth().glassCard().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = habit.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = habit.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box {
+                        IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "گزینه‌های بیشتر",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("ویرایش") },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                onClick = { showMenu = false; onEdit() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("حذف", color = AccentRed) },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = AccentRed) },
+                                onClick = { showMenu = false; onDelete() }
+                            )
+                        }
+                    }
+                }
                 habit.description?.let {
                     Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
