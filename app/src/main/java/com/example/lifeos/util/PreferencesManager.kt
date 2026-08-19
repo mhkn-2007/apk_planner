@@ -28,6 +28,12 @@ class PreferencesManager @Inject constructor(
     companion object {
         val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
         val NOTIFICATIONS_KEY = booleanPreferencesKey("notifications_enabled")
+        // Null/empty means "use LifeOS's own default alarm sound" (the
+        // device's default ALARM-type ringtone via RingtoneManager) —
+        // otherwise this holds the content:// URI of a sound the user
+        // picked from their device (prompt: Settings should let the user
+        // choose the app's default alarm sound or one from their phone).
+        val ALARM_SOUND_URI_KEY = stringPreferencesKey("alarm_sound_uri")
         private const val ENCRYPTED_PREFS_NAME = "lifeos_secure_prefs"
         private const val API_KEY_PREF = "gemini_api_key"
     }
@@ -38,6 +44,16 @@ class PreferencesManager @Inject constructor(
 
     val isNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[NOTIFICATIONS_KEY] ?: true
+    }
+
+    val alarmSoundUri: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[ALARM_SOUND_URI_KEY]
+    }
+
+    suspend fun setAlarmSoundUri(uri: String?) {
+        context.dataStore.edit { prefs ->
+            if (uri.isNullOrBlank()) prefs.remove(ALARM_SOUND_URI_KEY) else prefs[ALARM_SOUND_URI_KEY] = uri
+        }
     }
 
     // The Gemini API key is a credential, not an ordinary setting (prompt
